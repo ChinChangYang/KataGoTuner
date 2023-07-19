@@ -1,5 +1,4 @@
 from functools import reduce, cmp_to_key
-import math
 import subprocess
 from scipy.stats import norm
 from random import random
@@ -17,27 +16,52 @@ def get_katago_command(x: "list") -> str:
         str: KataGo command
     """
     global katago_exe
+    assert(len(x) == 7)
 
     # KataGo parameters
-    rootPolicyOptimism = 0.1
-    policyOptimism = x[0]
-    maxVisits = 4
-    numSearchThreads = 1
-    staticScoreUtilityFactor = x[1]
-    dynamicScoreUtilityFactor = x[2]
+    parameters = {
+        "maxVisits": 4,
+        "numSearchThreads": 1,
+        "chosenMoveTemperatureEarly": 0.5,
+        "chosenMoveTemperatureHalflife": 19,
+        "chosenMoveTemperature": 0.1,
+        "chosenMoveSubtract": 0,
+        "chosenMovePrune": 1,
+        "rootNumSymmetriesToSample": 1,
+        "lcbStdevs": 5.0,
+        "minVisitPropForLCB": 0.15,
+        "winLossUtilityFactor": 1.0,
+        "staticScoreUtilityFactor": 0.10,
+        "dynamicScoreUtilityFactor": 0.30,
+        "dynamicScoreCenterZeroWeight": 0.20,
+        "dynamicScoreCenterScale": 0.75,
+        "noResultUtilityForWhite": 0.0,
+        "drawEquivalentWinsForWhite": 0.5,
+        "cpuctExploration": x[0],
+        "cpuctExplorationLog": x[1],
+        "cpuctUtilityStdevPrior": x[2],
+        "cpuctUtilityStdevPriorWeight": (x[3] * 4.0),
+        "cpuctUtilityStdevScale": x[4],
+        "fpuReductionMax": x[5],
+        "rootFpuReductionMax": x[6],
+        "uncertaintyExponent": 1.0,
+        "uncertaintyCoeff": 0.25,
+        "rootPolicyOptimism": 0.2,
+        "policyOptimism": 1.0,
+        "valueWeightExponent": 0.25,
+        "rootEndingBonusPoints": 0.5,
+        "subtreeValueBiasFactor": 0.45,
+        "subtreeValueBiasWeightExponent": 0.85,
+        "nodeTableShardsPowerOfTwo": 16,
+        "numVirtualLossesPerThread": 1,
+    }
 
     # KataGo command
-    command = (f'{katago_exe} '
-               f'gtp '
-               f'-override-config rootPolicyOptimism={rootPolicyOptimism} '
-               f'-override-config policyOptimism={policyOptimism} '
-               f'-override-config maxVisits={maxVisits} '
-               f'-override-config numSearchThreads={numSearchThreads} '
-               f'-override-config staticScoreUtilityFactor={staticScoreUtilityFactor} '
-               f'-override-config dynamicScoreUtilityFactor={dynamicScoreUtilityFactor}'
-               )
+    command = f'{katago_exe} gtp '
+    for key, value in parameters.items():
+        command += f'-override-config {key}={value} '
     
-    return command
+    return command.strip() # Remove trailing space
 
 def spawn_process(command: "list[str]"):
     """Spawn a process with the command and wait until the process ends.
@@ -146,7 +170,7 @@ def simulate_badness(a: "list") -> float:
 
     # Scaler of the badness of the parameters
     # A larger scaler results in a more sensitive parameter in term of winrate
-    scaler = len(a) / 0.05
+    scaler = 1.0
 
     # Define the badness of the parameters
     badness = lambda x: scaler * abs(x - o)
@@ -249,18 +273,68 @@ def ranking(X: "list") -> "list":
 
     return F
 
-simulation = True # True: simulation; False: real games
+def match_program_a_and_b(a: "list", b: "list", games: int):
+    """Match program A and program B
+
+    Args:
+        a (list): the parameters of program A
+        b (list): the parameters of program B
+        games (int): the number of games
+
+    Returns:
+        _type_: a tuple of the numbers of games (A wins, draw, B wins)
+    """
+    global simulation
+
+    # A function that returns a result of a game that is played by programs A and B
+    resultOf = simulate_program_a_play_with_b if simulation else program_a_play_with_b
+
+    # Get results from the games
+    results = [resultOf(a, b) for _ in range(games)]
+
+    # Mark those games that program A wins
+    a_wins = [1 if result == -1 else 0 for result in results]
+
+    # Mark those games that program B wins
+    b_wins = [1 if result == 1 else 0 for result in results]
+
+    # Mark those draw games
+    draws = [1 if result == 0 else 0 for result in results]
+
+    # Count the games that program A wins
+    a_win = reduce(lambda x, y: x + y, a_wins)
+
+    # Count the games that program B wins
+    b_win = reduce(lambda x, y: x + y, b_wins)
+
+    # Count the draw games
+    draw = reduce(lambda x, y: x + y, draws)
+
+    return (a_win, draw, b_win)
+
+simulation = False # True: simulation; False: real games
 katago_exe = "/Users/chinchangyang/Code/KataGo/cpp/build/katago" # Path to KataGo executable file
 gogui_classpath = "/Users/chinchangyang/Code/gogui/bin" # Class path of `GoGui`
 
-x0 = 3 * [0.5] # initial guess of minimum solution
+# Default KataGo parameters
+default_parameters = [
+    1.0,        # cpuctExploration
+    0.45,       # cpuctExplorationLog
+    0.40,       # cpuctUtilityStdevPrior
+    2.0 / 4.0,  # cpuctUtilityStdevPriorWeight (4.0 for [0, 1] search domain)
+    0.85,       # cpuctUtilityStdevScale
+    0.2,        # fpuReductionMax
+    0.1,        # rootFpuReductionMax
+]
+
+x0 = default_parameters # initial guess of minimum solution
 sigma = 0.25 # initial standard deviation in each coordinate
 
 options = cma.CMAOptions() # initialize CMA options
 options.set('bounds', [0, 1]) # lower and upper boundaries of parameters
-options.set('popsize', 6) # population size
-options.set('tolx', 1e-3) # tolerance in solution changes
-options.set('maxfevals', 512) # maximum number of function evaluations
+options.set('popsize', 3) # population size
+options.set('tolx', 1e-2) # tolerance in solution changes
+options.set('maxfevals', 2048) # maximum number of function evaluations
 
 # Run the stochastic optimizer CMA-ES
 match = 0 # counter of match games
@@ -272,16 +346,51 @@ cma.plot()
 # Display the figures
 plt.show()
 
-default_parameters = [1.0, 0.10, 0.30]
-default_command = get_katago_command(default_parameters)
-print(f'Default KataGo command: {default_command}')
-print()
-
-cma_parameters = result[5]
-cma_command = get_katago_command(cma_parameters)
+cma_parameters = result[5] # CMA KataGo parameters
+cma_command = get_katago_command(cma_parameters) # CMA KataGo command
 print(f'CMA KataGo command: {cma_command}')
 
+default_command = get_katago_command(default_parameters) # default KataGo command
+print(f'Default KataGo command: {default_command}')
+
 # Pause to let users be able to view the diagrams
+print('Press enter to continue...')
 input()
 
-# TODO Validate the program with the best parameters that have been found by CMA
+games = 20 # number of games to verify goodness of CMA KataGo command
+print(f'Verifying goodness of CMA KataGo command with {games} games...')
+half_games = int(games / 2) # half of the number of games
+
+# Match default KataGo (as black) and CMA KataGo (as white)
+(default_win, draw, cma_win) = match_program_a_and_b(default_parameters, cma_parameters, half_games)
+
+# Record the number of games that black wins
+total_black_win = default_win
+
+# Record the number of games that white wins
+total_white_win = cma_win
+
+# Record the numbers of winning and draw games
+(total_default_win, total_draw, total_cma_win) = (default_win, draw, cma_win)
+
+# Match CMA KataGo (as black) and default KataGo (as white)
+(cma_win, draw, default_win) = match_program_a_and_b(cma_parameters, default_parameters, half_games)
+
+# Record the number of games that black wins
+total_black_win += cma_win
+
+# Record the number of games that white wins
+total_white_win += default_win
+
+# Record the number of draw games
+total_draw += draw
+
+# Record the number of games that default KataGo wins
+total_default_win += default_win
+
+# Record the number of games that CMA KataGo wins
+total_cma_win += cma_win
+
+print(f'Games: {games}')
+print(f'Black:draw:white = {total_black_win}:{total_draw}:{total_white_win}')
+print(f'Default:CMA = {total_default_win}:{total_cma_win}')
