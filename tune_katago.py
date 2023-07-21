@@ -1,49 +1,98 @@
 from functools import reduce, cmp_to_key
 import subprocess
-from scipy.stats import norm
+from scipy.stats import norm, binom
 from random import random
 from sgfmill import sgf
 import cma
 import matplotlib.pyplot as plt
+import numpy as np
 
-def get_katago_command(x: "list") -> str:
-    """Translate parameters into a KataGo command
+def translate_parameters(x: "list") -> "dict[str, float]":
+    """Translate solutions into parameters
 
     Args:
-        x (list): the parameters
+        x (list): solutions
 
     Returns:
-        str: KataGo command
+        list: parameters
     """
-    global katago_exe
-    assert(len(x) == 7)
-
-    # KataGo parameters
     parameters = {
-        "maxVisits": 4,
-        "numSearchThreads": 1,
+        "maxVisits": int(2 + (x[0] * 255)),
+        "lcbStdevs": (1.0 + (x[1] * 9.0)),
+        "minVisitPropForLCB": (x[2] * 0.30),
+        "staticScoreUtilityFactor": (x[3] * 0.2),
+        "dynamicScoreUtilityFactor": (x[4] * 0.6),
+        "cpuctExploration": (x[5] * 2.0),
+        "cpuctExplorationLog": (x[6] * 0.90),
+        "cpuctUtilityStdevPrior": (x[7] * 0.80),
+        "cpuctUtilityStdevPriorWeight": (x[8] * 4.0),
+        "cpuctUtilityStdevScale": (0.70 + (x[9] * 0.30)),
+    }
+
+    return parameters
+
+def translate_solutions(y: "dict[str, float]") -> "list":
+    """Translate parameters into solutions
+
+    Args:
+        y (dict[str, float]): parameters
+
+    Returns:
+        list: solutions
+    """
+    solutions = [
+        (y["maxVisits"] - 2) / 255,
+        (y["lcbStdevs"] - 1.0) / 9.0,
+        y["minVisitPropForLCB"] / 0.30,
+        y["staticScoreUtilityFactor"] / 0.2,
+        y["dynamicScoreUtilityFactor"] / 0.6,
+        y["cpuctExploration"] / 2.0,
+        y["cpuctExplorationLog"] / 0.90,
+        y["cpuctUtilityStdevPrior"] / 0.80,
+        y["cpuctUtilityStdevPriorWeight"] / 4.0,
+        (y["cpuctUtilityStdevScale"] - 0.70) / 0.30,
+    ]
+
+    return solutions
+
+def get_katago_parameters(x: "list") -> "dict[str, float]":
+    """Get KataGo parameters from a list of values within [0, 1]
+
+    Args:
+        x (list): a list of values
+
+    Returns:
+        dict[str, float]: KataGo parameters
+    """
+    assert(len(x) == 10)
+
+    sub_parameters = translate_parameters(x)
+
+    parameters = {
+        "maxVisits": sub_parameters["maxVisits"],
+        "numSearchThreads": 2,
         "chosenMoveTemperatureEarly": 0.5,
         "chosenMoveTemperatureHalflife": 19,
         "chosenMoveTemperature": 0.1,
         "chosenMoveSubtract": 0,
         "chosenMovePrune": 1,
         "rootNumSymmetriesToSample": 1,
-        "lcbStdevs": 5.0,
-        "minVisitPropForLCB": 0.15,
+        "lcbStdevs": sub_parameters["lcbStdevs"],
+        "minVisitPropForLCB": sub_parameters["minVisitPropForLCB"],
         "winLossUtilityFactor": 1.0,
-        "staticScoreUtilityFactor": 0.10,
-        "dynamicScoreUtilityFactor": 0.30,
+        "staticScoreUtilityFactor": sub_parameters["staticScoreUtilityFactor"],
+        "dynamicScoreUtilityFactor": sub_parameters["dynamicScoreUtilityFactor"],
         "dynamicScoreCenterZeroWeight": 0.20,
         "dynamicScoreCenterScale": 0.75,
         "noResultUtilityForWhite": 0.0,
         "drawEquivalentWinsForWhite": 0.5,
-        "cpuctExploration": x[0],
-        "cpuctExplorationLog": x[1],
-        "cpuctUtilityStdevPrior": x[2],
-        "cpuctUtilityStdevPriorWeight": (x[3] * 4.0),
-        "cpuctUtilityStdevScale": x[4],
-        "fpuReductionMax": x[5],
-        "rootFpuReductionMax": x[6],
+        "cpuctExploration": sub_parameters["cpuctExploration"],
+        "cpuctExplorationLog": sub_parameters["cpuctExplorationLog"],
+        "cpuctUtilityStdevPrior": sub_parameters["cpuctUtilityStdevPrior"],
+        "cpuctUtilityStdevPriorWeight": sub_parameters["cpuctUtilityStdevPriorWeight"],
+        "cpuctUtilityStdevScale": sub_parameters["cpuctUtilityStdevScale"],
+        "fpuReductionMax": 0.2,
+        "rootFpuReductionMax": 0.1,
         "uncertaintyExponent": 1.0,
         "uncertaintyCoeff": 0.25,
         "rootPolicyOptimism": 0.2,
@@ -55,6 +104,22 @@ def get_katago_command(x: "list") -> str:
         "nodeTableShardsPowerOfTwo": 16,
         "numVirtualLossesPerThread": 1,
     }
+
+    return parameters
+
+def get_katago_command(x: "list") -> str:
+    """Translate parameters into a KataGo command
+
+    Args:
+        x (list): the parameters
+
+    Returns:
+        str: KataGo command
+    """
+    global katago_exe
+
+    # KataGo parameters
+    parameters = get_katago_parameters(x)
 
     # KataGo command
     command = f'{katago_exe} gtp '
@@ -312,23 +377,30 @@ def match_program_a_and_b(a: "list", b: "list", games: int):
 
     return (a_win, draw, b_win)
 
-simulation = False # True: simulation; False: real games
-katago_exe = "/Users/chinchangyang/Code/KataGo/cpp/build/katago" # Path to KataGo executable file
+def print_parameters(parameters: "dict[str, float]"):
+    for name in parameters:
+        print(f'{name}: {parameters[name]}')
+
+simulation = True # True: simulation; False: real games
+katago_exe = "/Users/chinchangyang/Links/katago-ccy" # Path to KataGo executable file
 gogui_classpath = "/Users/chinchangyang/Code/gogui/bin" # Class path of `GoGui`
 
 # Default KataGo parameters
-default_parameters = [
-    1.0,        # cpuctExploration
-    0.45,       # cpuctExplorationLog
-    0.40,       # cpuctUtilityStdevPrior
-    2.0 / 4.0,  # cpuctUtilityStdevPriorWeight (4.0 for [0, 1] search domain)
-    0.85,       # cpuctUtilityStdevScale
-    0.2,        # fpuReductionMax
-    0.1,        # rootFpuReductionMax
-]
+default_parameters = {
+    "maxVisits": 256,
+    "lcbStdevs": 5.0,
+    "minVisitPropForLCB": 0.15,
+    "staticScoreUtilityFactor": 0.1,
+    "dynamicScoreUtilityFactor": 0.3,
+    "cpuctExploration": 1.0,
+    "cpuctExplorationLog": 0.45,
+    "cpuctUtilityStdevPrior": 0.40,
+    "cpuctUtilityStdevPriorWeight": 2.0,
+    "cpuctUtilityStdevScale": 0.85,
+}
 
-x0 = default_parameters # initial guess of minimum solution
-sigma = 0.25 # initial standard deviation in each coordinate
+# Default KataGo solutions
+default_solutions = translate_solutions(default_parameters)
 
 options = cma.CMAOptions() # initialize CMA options
 options.set('bounds', [0, 1]) # lower and upper boundaries of parameters
@@ -336,9 +408,10 @@ options.set('popsize', 3) # population size
 options.set('tolx', 1e-2) # tolerance in solution changes
 options.set('maxfevals', 2048) # maximum number of function evaluations
 
+match = 0 # initialize a counter of match games
+
 # Run the stochastic optimizer CMA-ES
-match = 0 # counter of match games
-result = cma.fmin(None, x0, sigma, options=options, parallel_objective=ranking)
+result = cma.fmin(None, default_solutions, 0.25, options=options, parallel_objective=ranking)
 
 # Plot CMA-ES data from files
 cma.plot()
@@ -346,23 +419,22 @@ cma.plot()
 # Display the figures
 plt.show()
 
-cma_parameters = result[5] # CMA KataGo parameters
-cma_command = get_katago_command(cma_parameters) # CMA KataGo command
-print(f'CMA KataGo command: {cma_command}')
+print('=== Default KataGo parameters (start) ===')
+print_parameters(default_parameters)
+print('=== Default KataGo parameters (end) ===')
 
-default_command = get_katago_command(default_parameters) # default KataGo command
-print(f'Default KataGo command: {default_command}')
+cma_solutions = result[5] # CMA solutions
+cma_parameters = translate_parameters(result[5]) # CMA KataGo parameters
+print('=== CMA KataGo parameters (start) ===')
+print_parameters(cma_parameters)
+print('=== CMA KataGo parameters (end) ===')
 
-# Pause to let users be able to view the diagrams
-print('Press enter to continue...')
-input()
-
-games = 20 # number of games to verify goodness of CMA KataGo command
+games = 100 # number of games to verify goodness of CMA KataGo command
 print(f'Verifying goodness of CMA KataGo command with {games} games...')
 half_games = int(games / 2) # half of the number of games
 
 # Match default KataGo (as black) and CMA KataGo (as white)
-(default_win, draw, cma_win) = match_program_a_and_b(default_parameters, cma_parameters, half_games)
+(default_win, draw, cma_win) = match_program_a_and_b(default_solutions, cma_solutions, half_games)
 
 # Record the number of games that black wins
 total_black_win = default_win
@@ -374,7 +446,7 @@ total_white_win = cma_win
 (total_default_win, total_draw, total_cma_win) = (default_win, draw, cma_win)
 
 # Match CMA KataGo (as black) and default KataGo (as white)
-(cma_win, draw, default_win) = match_program_a_and_b(cma_parameters, default_parameters, half_games)
+(cma_win, draw, default_win) = match_program_a_and_b(cma_solutions, default_solutions, half_games)
 
 # Record the number of games that black wins
 total_black_win += cma_win
@@ -394,3 +466,72 @@ total_cma_win += cma_win
 print(f'Games: {games}')
 print(f'Black:draw:white = {total_black_win}:{total_draw}:{total_white_win}')
 print(f'Default:CMA = {total_default_win}:{total_cma_win}')
+
+# Binomial distribution under the null hypothesis
+n_values = np.arange(games + 1) # possible number of wins for A
+prob_values = binom.pmf(n_values, games, 0.5) # probabilities under the null hypothesis
+
+# Calculate the cutoffs for the number of wins that correspond to a p-value of 0.05
+lower_cutoff = 0
+upper_cutoff = games
+cumulative_prob = 0
+
+# Calculate lower cutoff
+for k in range(0, games + 1):
+    prob = binom.pmf(k, games, 0.5)
+    if cumulative_prob + prob < 0.025:
+        cumulative_prob += prob
+        lower_cutoff = k
+    else:
+        break
+
+cumulative_prob = 0 # reset cumulative probability
+
+# Calculate upper cutoff
+for k in range(games, -1, -1):
+    prob = binom.pmf(k, games, 0.5)
+    if cumulative_prob + prob < 0.025:
+        cumulative_prob += prob
+        upper_cutoff = k
+    else:
+        break
+
+# Plot the binomial distribution
+plt.figure(figsize=(10, 6))
+
+# Highlight the region of the distribution that is less extreme than the cutoffs
+mask_not_extreme = np.logical_and(n_values > lower_cutoff, n_values < upper_cutoff) # region where null hypothesis is accepted
+
+plt.bar(
+    n_values[mask_not_extreme],
+    prob_values[mask_not_extreme],
+    color = 'blue',
+    alpha = 0.7,
+    label = 'Region where $H_0$ is not rejected'
+)
+
+# Highlight the region of the distribution that is as extreme as or more extreme than the cutoffs
+mask_extreme = np.logical_or(n_values <= lower_cutoff, n_values >= upper_cutoff) # region where null hypothesis is rejected
+
+plt.bar(
+    n_values[mask_extreme],
+    prob_values[mask_extreme],
+    color = 'red',
+    alpha = 0.7,
+    label = 'Region where $H_0$ is rejected'
+)
+
+# Show where the actual number of wins stands
+plt.axvline(x = total_cma_win, color = 'green', linestyle = '--')
+plt.text(total_cma_win + 1, max(prob_values) / 2, 'Actual number of wins for CMA', color = 'green')
+
+plt.xlabel('Number of wins for CMA')
+plt.ylabel('Probability')
+plt.title('Binomial distribution under the null hypothesis')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Pause to let users be able to view the diagrams
+print('Press enter to continue...')
+input()
