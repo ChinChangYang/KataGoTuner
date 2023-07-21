@@ -1,3 +1,5 @@
 #!/bin/zsh
-rm *.{sgf,dat}
+rm -f *.sgf
+rm -f *.dat
+rm -f *.lock
 rm -rf gtp_logs outcmaes
