@@ -17,16 +17,16 @@ def translate_parameters(x: "list") -> "dict[str, float]":
         list: parameters
     """
     parameters = {
-        "maxVisits": int(2 + (x[0] * 255)),
+        "policyOptimism": x[0],
         "lcbStdevs": (1.0 + (x[1] * 9.0)),
-        "minVisitPropForLCB": (x[2] * 0.30),
-        "staticScoreUtilityFactor": (x[3] * 0.2),
-        "dynamicScoreUtilityFactor": (x[4] * 0.6),
-        "cpuctExploration": (x[5] * 2.0),
-        "cpuctExplorationLog": (x[6] * 0.90),
-        "cpuctUtilityStdevPrior": (x[7] * 0.80),
-        "cpuctUtilityStdevPriorWeight": (x[8] * 4.0),
-        "cpuctUtilityStdevScale": (0.70 + (x[9] * 0.30)),
+        "minVisitPropForLCB": (x[2] * 0.60),
+        "staticScoreUtilityFactor": (x[3] * 0.4),
+        "dynamicScoreUtilityFactor": (x[4] * 1.0),
+        "cpuctExploration": (x[5] * 4.0),
+        "cpuctExplorationLog": (x[6] * 1.80),
+        "cpuctUtilityStdevPrior": (x[7] * 1.60),
+        "cpuctUtilityStdevPriorWeight": (x[8] * 8.0),
+        "cpuctUtilityStdevScale": (0.40 + (x[9] * 0.60)),
     }
 
     return parameters
@@ -41,16 +41,16 @@ def translate_solutions(y: "dict[str, float]") -> "list":
         list: solutions
     """
     solutions = [
-        (y["maxVisits"] - 2) / 255,
+        y["policyOptimism"],
         (y["lcbStdevs"] - 1.0) / 9.0,
-        y["minVisitPropForLCB"] / 0.30,
-        y["staticScoreUtilityFactor"] / 0.2,
-        y["dynamicScoreUtilityFactor"] / 0.6,
-        y["cpuctExploration"] / 2.0,
-        y["cpuctExplorationLog"] / 0.90,
-        y["cpuctUtilityStdevPrior"] / 0.80,
-        y["cpuctUtilityStdevPriorWeight"] / 4.0,
-        (y["cpuctUtilityStdevScale"] - 0.70) / 0.30,
+        y["minVisitPropForLCB"] / 0.60,
+        y["staticScoreUtilityFactor"] / 0.4,
+        y["dynamicScoreUtilityFactor"] / 1.0,
+        y["cpuctExploration"] / 4.0,
+        y["cpuctExplorationLog"] / 1.80,
+        y["cpuctUtilityStdevPrior"] / 1.60,
+        y["cpuctUtilityStdevPriorWeight"] / 8.0,
+        (y["cpuctUtilityStdevScale"] - 0.40) / 0.60,
     ]
 
     return solutions
@@ -69,7 +69,7 @@ def get_katago_parameters(x: "list") -> "dict[str, float]":
     sub_parameters = translate_parameters(x)
 
     parameters = {
-        "maxVisits": sub_parameters["maxVisits"],
+        "maxVisits": 64,
         "numSearchThreads": 2,
         "chosenMoveTemperatureEarly": 0.5,
         "chosenMoveTemperatureHalflife": 19,
@@ -96,7 +96,7 @@ def get_katago_parameters(x: "list") -> "dict[str, float]":
         "uncertaintyExponent": 1.0,
         "uncertaintyCoeff": 0.25,
         "rootPolicyOptimism": 0.2,
-        "policyOptimism": 1.0,
+        "policyOptimism": sub_parameters["policyOptimism"],
         "valueWeightExponent": 0.25,
         "rootEndingBonusPoints": 0.5,
         "subtreeValueBiasFactor": 0.45,
@@ -291,7 +291,7 @@ def is_program_a_superior_than_b(a: "tuple", b: "tuple") -> int:
 
     # Number of games
     # A large number of games improves the accuracy of the result
-    games = 1
+    games = 3
 
     # A function that returns a result of a game that is played by programs A and B
     resultOf = simulate_program_a_play_with_b if simulation else program_a_play_with_b
@@ -387,7 +387,7 @@ gogui_classpath = "/Users/chinchangyang/Code/gogui/bin" # Class path of `GoGui`
 
 # Default KataGo parameters
 default_parameters = {
-    "maxVisits": 256,
+    "policyOptimism": 1.0,
     "lcbStdevs": 5.0,
     "minVisitPropForLCB": 0.15,
     "staticScoreUtilityFactor": 0.1,
@@ -402,9 +402,13 @@ default_parameters = {
 # Default KataGo solutions
 default_solutions = translate_solutions(default_parameters)
 
+# Sanity check
+assert(default_solutions == translate_solutions(translate_parameters(default_solutions)))
+
+# Modify CMA options
 options = cma.CMAOptions() # initialize CMA options
 options.set('bounds', [0, 1]) # lower and upper boundaries of parameters
-options.set('popsize', 3) # population size
+options.set('popsize', 6) # population size
 options.set('tolx', 1e-2) # tolerance in solution changes
 options.set('maxfevals', 2048) # maximum number of function evaluations
 
@@ -428,6 +432,22 @@ cma_parameters = translate_parameters(result[5]) # CMA KataGo parameters
 print('=== CMA KataGo parameters (start) ===')
 print_parameters(cma_parameters)
 print('=== CMA KataGo parameters (end) ===')
+
+# Parameter names are the same for both dictionaries
+parameter_names = default_parameters.keys()
+default_values = [default_parameters[k] for k in parameter_names]
+cma_values = [cma_parameters[k] for k in parameter_names]
+x = range(len(parameter_names)) # indices of parameter names
+
+# Visualize default and CMA KataGo parameters
+plt.figure()
+plt.barh(x, default_values, height = 0.4, align = 'center', label = 'Default Parameters')
+plt.barh(x, cma_values, height = 0.4, align = 'edge', label = 'CMA Parameters')
+plt.yticks(x, parameter_names)
+plt.xlabel('Parameter Value')
+plt.legend()
+plt.title('Comparison of Default and CMA KataGo Parameters')
+plt.show()
 
 games = 100 # number of games to verify goodness of CMA KataGo command
 print(f'Verifying goodness of CMA KataGo command with {games} games...')
@@ -497,7 +517,7 @@ for k in range(games, -1, -1):
         break
 
 # Plot the binomial distribution
-plt.figure(figsize=(10, 6))
+plt.figure()
 
 # Highlight the region of the distribution that is less extreme than the cutoffs
 mask_not_extreme = np.logical_and(n_values > lower_cutoff, n_values < upper_cutoff) # region where null hypothesis is accepted
@@ -523,7 +543,14 @@ plt.bar(
 
 # Show where the actual number of wins stands
 plt.axvline(x = total_cma_win, color = 'green', linestyle = '--')
-plt.text(total_cma_win + 1, max(prob_values) / 2, 'Actual number of wins for CMA', color = 'green')
+
+plt.text(
+    total_cma_win + 1,
+    max(prob_values) / 2,
+    'Actual number of wins for CMA',
+    color = 'green',
+    fontsize = 10
+)
 
 plt.xlabel('Number of wins for CMA')
 plt.ylabel('Probability')
