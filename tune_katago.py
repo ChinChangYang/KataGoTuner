@@ -17,17 +17,11 @@ def translate_parameters(x: "list") -> "dict[str, float]":
         list: parameters
     """
     parameters = {
-        "policyOptimism": x[0],
-        "lcbStdevs": (1.0 + (x[1] * 9.0)),
-        "minVisitPropForLCB": (x[2] * 0.60),
-        "staticScoreUtilityFactor": (x[3] * 0.4),
-        "dynamicScoreUtilityFactor": (x[4] * 1.0),
-        "cpuctExploration": (x[5] * 4.0),
-        "cpuctExplorationLog": (x[6] * 1.80),
-        "cpuctUtilityStdevPrior": (x[7] * 1.60),
-        "cpuctUtilityStdevPriorWeight": (x[8] * 8.0),
-        "cpuctUtilityStdevScale": (0.40 + (x[9] * 0.60)),
+        "cpuctExploration": (x[0] * 4.0),
+        "cpuctExplorationLog": (x[1] * 1.80),
     }
+
+    assert len(x) == len(parameters.keys())
 
     return parameters
 
@@ -41,16 +35,8 @@ def translate_solutions(y: "dict[str, float]") -> "list":
         list: solutions
     """
     solutions = [
-        y["policyOptimism"],
-        (y["lcbStdevs"] - 1.0) / 9.0,
-        y["minVisitPropForLCB"] / 0.60,
-        y["staticScoreUtilityFactor"] / 0.4,
-        y["dynamicScoreUtilityFactor"] / 1.0,
         y["cpuctExploration"] / 4.0,
         y["cpuctExplorationLog"] / 1.80,
-        y["cpuctUtilityStdevPrior"] / 1.60,
-        y["cpuctUtilityStdevPriorWeight"] / 8.0,
-        (y["cpuctUtilityStdevScale"] - 0.40) / 0.60,
     ]
 
     return solutions
@@ -64,8 +50,6 @@ def get_katago_parameters(x: "list") -> "dict[str, float]":
     Returns:
         dict[str, float]: KataGo parameters
     """
-    assert(len(x) == 10)
-
     sub_parameters = translate_parameters(x)
 
     parameters = {
@@ -77,26 +61,26 @@ def get_katago_parameters(x: "list") -> "dict[str, float]":
         "chosenMoveSubtract": 0,
         "chosenMovePrune": 1,
         "rootNumSymmetriesToSample": 1,
-        "lcbStdevs": sub_parameters["lcbStdevs"],
-        "minVisitPropForLCB": sub_parameters["minVisitPropForLCB"],
+        "lcbStdevs": 5.0,
+        "minVisitPropForLCB": 0.15,
         "winLossUtilityFactor": 1.0,
-        "staticScoreUtilityFactor": sub_parameters["staticScoreUtilityFactor"],
-        "dynamicScoreUtilityFactor": sub_parameters["dynamicScoreUtilityFactor"],
+        "staticScoreUtilityFactor": 0.1,
+        "dynamicScoreUtilityFactor": 0.3,
         "dynamicScoreCenterZeroWeight": 0.20,
         "dynamicScoreCenterScale": 0.75,
         "noResultUtilityForWhite": 0.0,
         "drawEquivalentWinsForWhite": 0.5,
         "cpuctExploration": sub_parameters["cpuctExploration"],
         "cpuctExplorationLog": sub_parameters["cpuctExplorationLog"],
-        "cpuctUtilityStdevPrior": sub_parameters["cpuctUtilityStdevPrior"],
-        "cpuctUtilityStdevPriorWeight": sub_parameters["cpuctUtilityStdevPriorWeight"],
-        "cpuctUtilityStdevScale": sub_parameters["cpuctUtilityStdevScale"],
+        "cpuctUtilityStdevPrior": 0.40,
+        "cpuctUtilityStdevPriorWeight": 2.0,
+        "cpuctUtilityStdevScale": 0.85,
         "fpuReductionMax": 0.2,
         "rootFpuReductionMax": 0.1,
         "uncertaintyExponent": 1.0,
         "uncertaintyCoeff": 0.25,
         "rootPolicyOptimism": 0.2,
-        "policyOptimism": sub_parameters["policyOptimism"],
+        "policyOptimism": 1.0,
         "valueWeightExponent": 0.25,
         "rootEndingBonusPoints": 0.5,
         "subtreeValueBiasFactor": 0.45,
@@ -220,30 +204,38 @@ def program_a_play_with_b(a: "list", b: "list") -> int:
 
     return is_won
 
-def simulate_badness(a: "list") -> float:
-    """Simulate the badness of the parameters
+def simulate_elo(a: "list") -> float:
+    """Simulates ELO rating for given parameters.
+
+    This function computes the ELO rating by applying a penalty on each
+    parameter value based on how much it deviates from a predefined optimal
+    solution. This penalty is then scaled, with each subsequent parameter 
+    having an exponentially greater weight, making the function sensitive to the
+    latter parameters in the list.
 
     Args:
-        a (list): the parameters
+        a (list): The parameters for which ELO rating is to be computed.
 
     Returns:
-        float: the badness of the parameters
+        float: The computed ELO rating for the given parameters.
     """
+    global default_solutions
 
-    # Optimal parameter
-    o = 0.1
+    # Define the scaling factors for each parameter. A parameter's influence on 
+    # the ELO rating grows exponentially with its position in the list.
+    scalers = [-1e2 * (2 ** i) for i in range(len(a))]
 
-    # Scaler of the badness of the parameters
-    # A larger scaler results in a more sensitive parameter in term of winrate
-    scaler = 1.0
+    # Combine scaling factors, input parameters and optimal solutions into tuples
+    zipped = zip(scalers, a, default_solutions)
 
-    # Define the badness of the parameters
-    badness = lambda x: scaler * abs(x - o)
+    # Define the ELO rating calculation for a single parameter, as the product 
+    # of the scaling factor and the absolute difference from the optimal solution.
+    elo = lambda c, x, o: c * abs(x - o)
 
-    # Badness of each parameter of program A
-    x2 = [badness(xi) for xi in a]
+    # Compute the individual parameter scores by applying the ELO calculation.
+    x2 = [elo(ci, xi, oi) for (ci, xi, oi) in zipped]
 
-    # Sum the badness of the parameters of program A
+    # Combine the individual parameter scores into a total ELO rating by summation.
     fa = reduce(lambda x2i, x2j: x2i + x2j, x2)
 
     return fa
@@ -263,14 +255,19 @@ def simulate_program_a_play_with_b(a: "list", b: "list") -> int:
     # Trigger the side effect of the prefix getter
     get_prefix_sgffile()
 
-    # Badness of program A
-    fa = simulate_badness(a)
+    # Elo rating of program A
+    fa = simulate_elo(a)
 
-    # Badness of program B
-    fb = simulate_badness(b)
+    # Elo rating of program B
+    fb = simulate_elo(b)
 
     # Winrate of program A
-    winrate = 1 - norm.cdf(fa - fb)
+    if (fb - fa) / 400 > 10:
+        winrate = 0
+    elif (fb - fa) / 400 < -10:
+        winrate = 1
+    else:
+        winrate = 1 / (1 + 10 ** ((fb - fa) / 400))
 
     # Result of a game
     is_won = -1 if random() < winrate else 1
@@ -291,7 +288,7 @@ def is_program_a_superior_than_b(a: "tuple", b: "tuple") -> int:
 
     # Number of games
     # A large number of games improves the accuracy of the result
-    games = 3
+    games = 1
 
     # A function that returns a result of a game that is played by programs A and B
     resultOf = simulate_program_a_play_with_b if simulation else program_a_play_with_b
@@ -381,22 +378,14 @@ def print_parameters(parameters: "dict[str, float]"):
     for name in parameters:
         print(f'{name}: {parameters[name]}')
 
-simulation = True # True: simulation; False: real games
+simulation = False # True: simulation; False: real games
 katago_exe = "/Users/chinchangyang/Links/katago-ccy" # Path to KataGo executable file
 gogui_classpath = "/Users/chinchangyang/Code/gogui/bin" # Class path of `GoGui`
 
 # Default KataGo parameters
 default_parameters = {
-    "policyOptimism": 1.0,
-    "lcbStdevs": 5.0,
-    "minVisitPropForLCB": 0.15,
-    "staticScoreUtilityFactor": 0.1,
-    "dynamicScoreUtilityFactor": 0.3,
     "cpuctExploration": 1.0,
     "cpuctExplorationLog": 0.45,
-    "cpuctUtilityStdevPrior": 0.40,
-    "cpuctUtilityStdevPriorWeight": 2.0,
-    "cpuctUtilityStdevScale": 0.85,
 }
 
 # Default KataGo solutions
@@ -408,14 +397,15 @@ assert(default_solutions == translate_solutions(translate_parameters(default_sol
 # Modify CMA options
 options = cma.CMAOptions() # initialize CMA options
 options.set('bounds', [0, 1]) # lower and upper boundaries of parameters
-options.set('popsize', 6) # population size
+options.set('popsize', 24) # population size
 options.set('tolx', 1e-2) # tolerance in solution changes
-options.set('maxfevals', 2048) # maximum number of function evaluations
+options.set('maxfevals', 1024) # maximum number of function evaluations
+options.set('tolconditioncov', 1e12) # tolerance in condition of the covariance matrix
 
 match = 0 # initialize a counter of match games
 
 # Run the stochastic optimizer CMA-ES
-result = cma.fmin(None, default_solutions, 0.25, options=options, parallel_objective=ranking)
+result = cma.fmin(None, default_solutions, 0.1, options=options, parallel_objective=ranking)
 
 # Plot CMA-ES data from files
 cma.plot()
@@ -432,6 +422,9 @@ cma_parameters = translate_parameters(result[5]) # CMA KataGo parameters
 print('=== CMA KataGo parameters (start) ===')
 print_parameters(cma_parameters)
 print('=== CMA KataGo parameters (end) ===')
+
+if simulation:
+    print(f'Elo of CMA KataGo parameters (simulation): {simulate_elo(cma_solutions)}')
 
 # Parameter names are the same for both dictionaries
 parameter_names = default_parameters.keys()
