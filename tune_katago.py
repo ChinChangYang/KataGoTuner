@@ -19,6 +19,9 @@ def translate_parameters(x: "list") -> "dict[str, float]":
     parameters = {
         "cpuctExploration": (x[0] * 4.0),
         "cpuctExplorationLog": (x[1] * 1.80),
+        "winLossUtilityFactor": (x[2] * 1.0),
+        "staticScoreUtilityFactor": (x[3] * 1.0),
+        "dynamicScoreUtilityFactor": (x[4] * 1.0),
     }
 
     assert len(x) == len(parameters.keys())
@@ -37,6 +40,9 @@ def translate_solutions(y: "dict[str, float]") -> "list":
     solutions = [
         y["cpuctExploration"] / 4.0,
         y["cpuctExplorationLog"] / 1.80,
+        y["winLossUtilityFactor"] / 1.0,
+        y["staticScoreUtilityFactor"] / 1.0,
+        y["dynamicScoreUtilityFactor"] / 1.0,
     ]
 
     return solutions
@@ -53,7 +59,7 @@ def get_katago_parameters(x: "list") -> "dict[str, float]":
     sub_parameters = translate_parameters(x)
 
     parameters = {
-        "maxVisits": 64,
+        "maxVisits": 16,
         "numSearchThreads": 2,
         "chosenMoveTemperatureEarly": 0.5,
         "chosenMoveTemperatureHalflife": 19,
@@ -63,9 +69,9 @@ def get_katago_parameters(x: "list") -> "dict[str, float]":
         "rootNumSymmetriesToSample": 1,
         "lcbStdevs": 5.0,
         "minVisitPropForLCB": 0.15,
-        "winLossUtilityFactor": 1.0,
-        "staticScoreUtilityFactor": 0.1,
-        "dynamicScoreUtilityFactor": 0.3,
+        "winLossUtilityFactor": sub_parameters["winLossUtilityFactor"],
+        "staticScoreUtilityFactor": sub_parameters["staticScoreUtilityFactor"],
+        "dynamicScoreUtilityFactor": sub_parameters["dynamicScoreUtilityFactor"],
         "dynamicScoreCenterZeroWeight": 0.20,
         "dynamicScoreCenterScale": 0.75,
         "noResultUtilityForWhite": 0.0,
@@ -386,6 +392,9 @@ gogui_classpath = "/Users/chinchangyang/Code/gogui/bin" # Class path of `GoGui`
 default_parameters = {
     "cpuctExploration": 1.0,
     "cpuctExplorationLog": 0.45,
+    "winLossUtilityFactor": 1.0,
+    "staticScoreUtilityFactor": 0.1,
+    "dynamicScoreUtilityFactor": 0.3,
 }
 
 # Default KataGo solutions
@@ -397,9 +406,9 @@ assert(default_solutions == translate_solutions(translate_parameters(default_sol
 # Modify CMA options
 options = cma.CMAOptions() # initialize CMA options
 options.set('bounds', [0, 1]) # lower and upper boundaries of parameters
-options.set('popsize', 24) # population size
+options.set('popsize', 10 * len(default_solutions)) # population size
 options.set('tolx', 1e-2) # tolerance in solution changes
-options.set('maxfevals', 1024) # maximum number of function evaluations
+options.set('maxfevals', 4096) # maximum number of function evaluations
 options.set('tolconditioncov', 1e12) # tolerance in condition of the covariance matrix
 
 match = 0 # initialize a counter of match games
