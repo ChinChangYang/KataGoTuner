@@ -297,10 +297,10 @@ def is_program_a_superior_than_b(a: "tuple", b: "tuple") -> int:
     games = 1
 
     # A function that returns a result of a game that is played by programs A and B
-    resultOf = simulate_program_a_play_with_b if simulation else program_a_play_with_b
+    result_of = simulate_program_a_play_with_b if simulation else program_a_play_with_b
 
     # Get results from the games
-    results = [resultOf(a[1], b[1]) for _ in range(games)]
+    results = [result_of(a[1], b[1]) for _ in range(games)]
 
     # Sum the results
     reduce_sum_results = reduce(lambda x, y: x + y, results)
@@ -355,10 +355,10 @@ def match_program_a_and_b(a: "list", b: "list", games: int):
     global simulation
 
     # A function that returns a result of a game that is played by programs A and B
-    resultOf = simulate_program_a_play_with_b if simulation else program_a_play_with_b
+    result_of = simulate_program_a_play_with_b if simulation else program_a_play_with_b
 
     # Get results from the games
-    results = [resultOf(a, b) for _ in range(games)]
+    results = [result_of(a, b) for _ in range(games)]
 
     # Mark those games that program A wins
     a_wins = [1 if result == -1 else 0 for result in results]
