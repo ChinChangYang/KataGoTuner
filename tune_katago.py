@@ -210,14 +210,28 @@ def program_a_play_with_b(a: "list", b: "list") -> int:
 
     return is_won
 
+def rastrigin(x: "list") -> float:
+    """Rastrigin function. A non-linear multimodal function.
+
+    Args:
+        x (list): xi in [-5.12, 5.12] for each xi in x
+
+    Returns:
+        float: function value
+    """
+    A = 10
+    n = len(x)
+    y = [(xi ** 2) - (A * np.cos(2 * np.pi * xi)) for xi in x]
+    f = (A * n) + reduce(lambda yi, yj: yi + yj, y)
+
+    return f
+
 def simulate_elo(a: "list") -> float:
     """Simulates ELO rating for given parameters.
 
     This function computes the ELO rating by applying a penalty on each
     parameter value based on how much it deviates from a predefined optimal
-    solution. This penalty is then scaled, with each subsequent parameter 
-    having an exponentially greater weight, making the function sensitive to the
-    latter parameters in the list.
+    solution.
 
     Args:
         a (list): The parameters for which ELO rating is to be computed.
@@ -225,26 +239,25 @@ def simulate_elo(a: "list") -> float:
     Returns:
         float: The computed ELO rating for the given parameters.
     """
-    global default_solutions
+    global simulated_optimum
 
-    # Define the scaling factors for each parameter. A parameter's influence on 
-    # the ELO rating grows exponentially with its position in the list.
-    scalers = [-1e2 * (2 ** i) for i in range(len(a))]
+    # Combine the parameters and the default solutions
+    zipped = zip(a, simulated_optimum)
 
-    # Combine scaling factors, input parameters and optimal solutions into tuples
-    zipped = zip(scalers, a, default_solutions)
+    # Scale the parameters to the domain space of the Rastrigin function
+    x = [5.12 * (ai - oi) for (ai, oi) in zipped]
 
-    # Define the ELO rating calculation for a single parameter, as the product 
-    # of the scaling factor and the absolute difference from the optimal solution.
-    elo = lambda c, x, o: c * abs(x - o)
+    # Get the rastrigin function value
+    f = rastrigin(x)
 
-    # Compute the individual parameter scores by applying the ELO calculation.
-    x2 = [elo(ci, xi, oi) for (ci, xi, oi) in zipped]
+    # Define the scaling factor for the function value.
+    # A greater scaler makes the parameters more sensitive in the ELO rating.
+    scaler = 1
 
-    # Combine the individual parameter scores into a total ELO rating by summation.
-    fa = reduce(lambda x2i, x2j: x2i + x2j, x2)
+    # Calculate the ELO rating
+    elo = -scaler * f
 
-    return fa
+    return elo
 
 def simulate_program_a_play_with_b(a: "list", b: "list") -> int:
     """Simulate a result of a game where program A plays with program B
@@ -384,7 +397,7 @@ def print_parameters(parameters: "dict[str, float]"):
     for name in parameters:
         print(f'{name}: {parameters[name]}')
 
-simulation = False # True: simulation; False: real games
+simulation = True # True: simulation; False: real games
 katago_exe = "/Users/chinchangyang/Links/katago-ccy" # Path to KataGo executable file
 gogui_classpath = "/Users/chinchangyang/Code/gogui/bin" # Class path of `GoGui`
 
@@ -404,17 +417,24 @@ default_solutions = translate_solutions(default_parameters)
 assert(default_solutions == translate_solutions(translate_parameters(default_solutions)))
 
 # Modify CMA options
+x0 = default_solutions # initial guess of minimum solution
+sigma0 = 0.1 # initial standard deviation in each coordinate
 options = cma.CMAOptions() # initialize CMA options
 options.set('bounds', [0, 1]) # lower and upper boundaries of parameters
 options.set('popsize', 10 * len(default_solutions)) # population size
 options.set('tolx', 1e-2) # tolerance in solution changes
-options.set('maxfevals', 4096) # maximum number of function evaluations
+options.set('maxfevals', 2e4) # maximum number of function evaluations
 options.set('tolconditioncov', 1e12) # tolerance in condition of the covariance matrix
 
 match = 0 # initialize a counter of match games
 
+# Define simulated optimum
+if simulation:
+    shift = lambda x, s: (x - s) if (x - s) > 0 else (x + s)
+    simulated_optimum = [shift(x0i, sigma0) for x0i in x0]
+
 # Run the stochastic optimizer CMA-ES
-result = cma.fmin(None, default_solutions, 0.1, options=options, parallel_objective=ranking)
+result = cma.fmin(None, x0, sigma0, options=options, parallel_objective=ranking)
 
 # Plot CMA-ES data from files
 cma.plot()
@@ -427,12 +447,13 @@ print_parameters(default_parameters)
 print('=== Default KataGo parameters (end) ===')
 
 cma_solutions = result[5] # CMA solutions
-cma_parameters = translate_parameters(result[5]) # CMA KataGo parameters
+cma_parameters = translate_parameters(cma_solutions) # CMA KataGo parameters
 print('=== CMA KataGo parameters (start) ===')
 print_parameters(cma_parameters)
 print('=== CMA KataGo parameters (end) ===')
 
 if simulation:
+    print(f'Elo of default KataGo parameters (simulation): {simulate_elo(default_solutions)}')
     print(f'Elo of CMA KataGo parameters (simulation): {simulate_elo(cma_solutions)}')
 
 # Parameter names are the same for both dictionaries
