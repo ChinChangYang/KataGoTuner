@@ -6,6 +6,7 @@ from sgfmill import sgf
 import cma
 import matplotlib.pyplot as plt
 import numpy as np
+# import pairwiseclop
 
 def translate_parameters(x: "list") -> "dict[str, float]":
     """Translate solutions into parameters
@@ -301,7 +302,7 @@ def is_program_a_superior_than_b(a: "tuple", b: "tuple") -> int:
         b (tuple): b[0] is ignored, and b[1] contains the parameters of program B
 
     Returns:
-        int: _description_
+        int: -1 if program A is superior; 1 if program B is superior; 0 otherwise
     """
     global simulation
 
@@ -397,6 +398,107 @@ def print_parameters(parameters: "dict[str, float]"):
     for name in parameters:
         print(f'{name}: {parameters[name]}')
 
+def run_cma_fmin(x0: list, sigma0: float) -> list:
+    """Run CMA-ES fmin function
+
+    Args:
+        x0 (list): initial guess of minimum solution
+        sigma0 (float): initial standard deviation in each coordinate
+
+    Returns:
+        list: tuned solutions
+    """
+    # Modify CMA options
+    options = cma.CMAOptions() # initialize CMA options
+    options.set('bounds', [0, 1]) # lower and upper boundaries of parameters
+    options.set('popsize', 10 * len(x0)) # population size
+    options.set('tolx', 1e-2) # tolerance in solution changes
+    options.set('maxfevals', 2e4) # maximum number of function evaluations
+    options.set('tolconditioncov', 1e12) # tolerance in condition of the covariance matrix
+
+    # Run the stochastic optimizer CMA-ES
+    result = cma.fmin(None, x0, sigma0, options=options, parallel_objective=ranking)
+
+    # Plot CMA-ES data from files
+    cma.plot()
+
+    # Display the figures
+    plt.show()
+
+    return result[5]
+
+# def run_pairwiseclop(x0: list, sigma0: float) -> list:
+#     """Run pairwise CLOP
+
+#     Args:
+#         x0 (list): initial guess of minimum solution
+#         sigma0 (float): likely radius around guess
+
+#     Returns:
+#         list: tuned solutions
+#     """
+#     global simulation
+
+#     # Translate solutions to parameters for CLOP
+#     parameters = [
+#         pairwiseclop.Parameter(
+#             name=str(i),
+#             guess=x0[i],
+#             likely_radius_around_guess=sigma0,
+#             hard_lower_bound=0.0,
+#             hard_upper_bound=1.0,
+#         ) for i in range(len(x0))
+#     ]
+
+#     def parameters_to_solutions(parameters) -> list:
+#         # Translate parameters to solutions for CLOP
+#         solutions = [parameters[str(i)] for i in range(len(x0))]
+#         return solutions
+    
+#     # Initialize CLOP
+#     clop = pairwiseclop.PairwiseCLOP(parameters)
+
+#     # Initialize optimum
+#     optimum = x0
+
+#     # A function that returns a result of a game that is played by programs A and B
+#     result_of = simulate_program_a_play_with_b if simulation else program_a_play_with_b
+
+#     for iteration in range(10):
+#         for _ in range(10):
+#             # Sample parameters A to evaluate
+#             a = clop.sample_params_to_evaluate()
+
+#             # Sample parameters B to evaluate
+#             b = clop.sample_params_to_evaluate()
+
+#             # Get the result from the games
+#             is_won = result_of(
+#                 parameters_to_solutions(a),
+#                 parameters_to_solutions(b),
+#             )
+
+#             if is_won == -1:
+#                 # Program A won
+#                 clop.add_win(winner = a, loser = b)
+#             elif is_won == 1:
+#                 # Program B won
+#                 clop.add_win(winner = b, loser = a)
+#             else:
+#                 # Draw
+#                 clop.add_draw(a, b)
+
+#         # Recompute regression
+#         clop.recompute()
+
+#         # Get the current optimum
+#         optimum = parameters_to_solutions(clop.get_current_optimum())
+
+#         # Print the iteration and the current optimum
+#         print(f'Iteration: {iteration}, optimum: {optimum}')
+
+#     return optimum
+
 simulation = True # True: simulation; False: real games
 katago_exe = "/Users/chinchangyang/Links/katago-ccy" # Path to KataGo executable file
 gogui_classpath = "/Users/chinchangyang/Code/gogui/bin" # Class path of `GoGui`
@@ -416,68 +518,61 @@ default_solutions = translate_solutions(default_parameters)
 # Sanity check
 assert(default_solutions == translate_solutions(translate_parameters(default_solutions)))
 
-# Modify CMA options
+match = 0 # initialize a counter of match games
 x0 = default_solutions # initial guess of minimum solution
 sigma0 = 0.1 # initial standard deviation in each coordinate
-options = cma.CMAOptions() # initialize CMA options
-options.set('bounds', [0, 1]) # lower and upper boundaries of parameters
-options.set('popsize', 10 * len(default_solutions)) # population size
-options.set('tolx', 1e-2) # tolerance in solution changes
-options.set('maxfevals', 2e4) # maximum number of function evaluations
-options.set('tolconditioncov', 1e12) # tolerance in condition of the covariance matrix
-
-match = 0 # initialize a counter of match games
 
 # Define simulated optimum
 if simulation:
     shift = lambda x, s: (x - s) if (x - s) > 0 else (x + s)
     simulated_optimum = [shift(x0i, sigma0) for x0i in x0]
 
-# Run the stochastic optimizer CMA-ES
-result = cma.fmin(None, x0, sigma0, options=options, parallel_objective=ranking)
+# Get tuned solutions by the stochastic optimizer CMA-ES
+tuned_solutions = run_cma_fmin(x0, sigma0)
 
-# Plot CMA-ES data from files
-cma.plot()
+# Get tuned solutions by the CLOP
+# tuned_solutions = run_pairwiseclop(x0, sigma0)
 
-# Display the figures
-plt.show()
+# Print the number of match games
+print(f'Match games: {match}')
 
+# Print default parameters
 print('=== Default KataGo parameters (start) ===')
 print_parameters(default_parameters)
 print('=== Default KataGo parameters (end) ===')
 
-cma_solutions = result[5] # CMA solutions
-cma_parameters = translate_parameters(cma_solutions) # CMA KataGo parameters
-print('=== CMA KataGo parameters (start) ===')
-print_parameters(cma_parameters)
-print('=== CMA KataGo parameters (end) ===')
+# Print tuned parameters
+tuned_parameters = translate_parameters(tuned_solutions)
+print('=== Tuned KataGo parameters (start) ===')
+print_parameters(tuned_parameters)
+print('=== Tuned KataGo parameters (end) ===')
 
 if simulation:
     print(f'Elo of default KataGo parameters (simulation): {simulate_elo(default_solutions)}')
-    print(f'Elo of CMA KataGo parameters (simulation): {simulate_elo(cma_solutions)}')
+    print(f'Elo of Tuned KataGo parameters (simulation): {simulate_elo(tuned_solutions)}')
 
 # Parameter names are the same for both dictionaries
 parameter_names = default_parameters.keys()
 default_values = [default_parameters[k] for k in parameter_names]
-cma_values = [cma_parameters[k] for k in parameter_names]
+cma_values = [tuned_parameters[k] for k in parameter_names]
 x = range(len(parameter_names)) # indices of parameter names
 
-# Visualize default and CMA KataGo parameters
+# Visualize default and Tuned KataGo parameters
 plt.figure()
 plt.barh(x, default_values, height = 0.4, align = 'center', label = 'Default Parameters')
-plt.barh(x, cma_values, height = 0.4, align = 'edge', label = 'CMA Parameters')
+plt.barh(x, cma_values, height = 0.4, align = 'edge', label = 'Tuned Parameters')
 plt.yticks(x, parameter_names)
 plt.xlabel('Parameter Value')
 plt.legend()
 plt.title('Comparison of Default and CMA KataGo Parameters')
 plt.show()
 
-games = 100 # number of games to verify goodness of CMA KataGo command
-print(f'Verifying goodness of CMA KataGo command with {games} games...')
+games = 100 # number of games to verify goodness of Tuned KataGo command
+print(f'Verifying goodness of Tuned KataGo command with {games} games...')
 half_games = int(games / 2) # half of the number of games
 
-# Match default KataGo (as black) and CMA KataGo (as white)
-(default_win, draw, cma_win) = match_program_a_and_b(default_solutions, cma_solutions, half_games)
+# Match default KataGo (as black) and Tuned KataGo (as white)
+(default_win, draw, cma_win) = match_program_a_and_b(default_solutions, tuned_solutions, half_games)
 
 # Record the number of games that black wins
 total_black_win = default_win
@@ -488,8 +583,8 @@ total_white_win = cma_win
 # Record the numbers of winning and draw games
 (total_default_win, total_draw, total_cma_win) = (default_win, draw, cma_win)
 
-# Match CMA KataGo (as black) and default KataGo (as white)
-(cma_win, draw, default_win) = match_program_a_and_b(cma_solutions, default_solutions, half_games)
+# Match Tuned KataGo (as black) and default KataGo (as white)
+(cma_win, draw, default_win) = match_program_a_and_b(tuned_solutions, default_solutions, half_games)
 
 # Record the number of games that black wins
 total_black_win += cma_win
@@ -503,12 +598,12 @@ total_draw += draw
 # Record the number of games that default KataGo wins
 total_default_win += default_win
 
-# Record the number of games that CMA KataGo wins
+# Record the number of games that Tuned KataGo wins
 total_cma_win += cma_win
 
 print(f'Games: {games}')
 print(f'Black:draw:white = {total_black_win}:{total_draw}:{total_white_win}')
-print(f'Default:CMA = {total_default_win}:{total_cma_win}')
+print(f'Default:Tuned = {total_default_win}:{total_cma_win}')
 
 # Binomial distribution under the null hypothesis
 n_values = np.arange(games + 1) # possible number of wins for A
@@ -570,12 +665,12 @@ plt.axvline(x = total_cma_win, color = 'green', linestyle = '--')
 plt.text(
     total_cma_win + 1,
     max(prob_values) / 2,
-    'Actual number of wins for CMA',
+    'Actual number of wins for Tuned',
     color = 'green',
     fontsize = 10
 )
 
-plt.xlabel('Number of wins for CMA')
+plt.xlabel('Number of wins for Tuned')
 plt.ylabel('Probability')
 plt.title('Binomial distribution under the null hypothesis')
 plt.legend()
