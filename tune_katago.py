@@ -6,7 +6,7 @@ from sgfmill import sgf
 import cma
 import matplotlib.pyplot as plt
 import numpy as np
-# import pairwiseclop
+import pairwiseclop
 
 def translate_parameters(x: "list") -> "dict[str, float]":
     """Translate solutions into parameters
@@ -427,77 +427,88 @@ def run_cma_fmin(x0: list, sigma0: float) -> list:
 
     return result[5]
 
-# def run_pairwiseclop(x0: list, sigma0: float) -> list:
-#     """Run pairwise CLOP
+def run_pairwiseclop(x0: list, sigma0: float) -> list:
+    """Run pairwise CLOP
 
-#     Args:
-#         x0 (list): initial guess of minimum solution
-#         sigma0 (float): likely radius around guess
+    Args:
+        x0 (list): initial guess of minimum solution
+        sigma0 (float): likely radius around guess
 
-#     Returns:
-#         list: tuned solutions
-#     """
-#     global simulation
+    Returns:
+        list: tuned solutions
+    """
+    global simulation
 
-#     # Translate solutions to parameters for CLOP
-#     parameters = [
-#         pairwiseclop.Parameter(
-#             name=str(i),
-#             guess=x0[i],
-#             likely_radius_around_guess=sigma0,
-#             hard_lower_bound=0.0,
-#             hard_upper_bound=1.0,
-#         ) for i in range(len(x0))
-#     ]
+    # Translate solutions to parameters for CLOP
+    parameters = [
+        pairwiseclop.Parameter(
+            name=str(i),
+            guess=x0[i],
+            likely_radius_around_guess=sigma0,
+            hard_lower_bound=0.0,
+            hard_upper_bound=1.0,
+        ) for i in range(len(x0))
+    ]
 
-#     def parameters_to_solutions(parameters) -> list:
-#         # Translate parameters to solutions for CLOP
-#         solutions = [parameters[str(i)] for i in range(len(x0))]
-#         return solutions
+    def parameters_to_solutions(parameters) -> list:
+        # Translate parameters to solutions for CLOP
+        solutions = [parameters[str(i)] for i in range(len(x0))]
+
+        # Handling boundaries
+        for i in range(len(solutions)):
+            if solutions[i] < 0.0:
+                solutions[i] = 0.0
+            if solutions[i] > 1.0:
+                solutions[i] = 1.0
+
+            assert solutions[i] >= 0.0
+            assert solutions[i] <= 1.0
+
+        return solutions
     
-#     # Initialize CLOP
-#     clop = pairwiseclop.PairwiseCLOP(parameters)
+    # Initialize CLOP
+    clop = pairwiseclop.PairwiseCLOP(parameters)
 
-#     # Initialize optimum
-#     optimum = x0
+    # Initialize optimum
+    optimum = x0
 
-#     # A function that returns a result of a game that is played by programs A and B
-#     result_of = simulate_program_a_play_with_b if simulation else program_a_play_with_b
+    # A function that returns a result of a game that is played by programs A and B
+    result_of = simulate_program_a_play_with_b if simulation else program_a_play_with_b
 
-#     for iteration in range(10):
-#         for _ in range(10):
-#             # Sample parameters A to evaluate
-#             a = clop.sample_params_to_evaluate()
+    for iteration in range(100):
+        for _ in range(10):
+            # Sample parameters A to evaluate
+            a = clop.sample_params_to_evaluate()
 
-#             # Sample parameters B to evaluate
-#             b = clop.sample_params_to_evaluate()
+            # Sample parameters B to evaluate
+            b = clop.sample_params_to_evaluate()
 
-#             # Get the result from the games
-#             is_won = result_of(
-#                 parameters_to_solutions(a),
-#                 parameters_to_solutions(b),
-#             )
+            # Get the result from the games
+            is_won = result_of(
+                parameters_to_solutions(a),
+                parameters_to_solutions(b),
+            )
 
-#             if is_won == -1:
-#                 # Program A won
-#                 clop.add_win(winner = a, loser = b)
-#             elif is_won == 1:
-#                 # Program B won
-#                 clop.add_win(winner = b, loser = a)
-#             else:
-#                 # Draw
-#                 clop.add_draw(a, b)
+            if is_won == -1:
+                # Program A won
+                clop.add_win(winner = a, loser = b)
+            elif is_won == 1:
+                # Program B won
+                clop.add_win(winner = b, loser = a)
+            else:
+                # Draw
+                clop.add_draw(a, b)
 
-#         # Recompute regression
-#         clop.recompute()
+        # Recompute regression
+        clop.recompute()
 
-#         # Get the current optimum
-#         optimum = parameters_to_solutions(clop.get_current_optimum())
+        # Get the current optimum
+        optimum = parameters_to_solutions(clop.get_current_optimum())
 
-#         # Print the iteration and the current optimum
-#         print(f'Iteration: {iteration}, optimum: {optimum}')
+        # Print the iteration and the current optimum
+        print(f'Iteration: {iteration}, optimum: {optimum}')
 
-#     return optimum
+    return optimum
 
 simulation = True # True: simulation; False: real games
 katago_exe = "/Users/chinchangyang/Links/katago-ccy" # Path to KataGo executable file
@@ -528,10 +539,10 @@ if simulation:
     simulated_optimum = [shift(x0i, sigma0) for x0i in x0]
 
 # Get tuned solutions by the stochastic optimizer CMA-ES
-tuned_solutions = run_cma_fmin(x0, sigma0)
+# tuned_solutions = run_cma_fmin(x0, sigma0)
 
 # Get tuned solutions by the CLOP
-# tuned_solutions = run_pairwiseclop(x0, sigma0)
+tuned_solutions = run_pairwiseclop(x0, sigma0)
 
 # Print the number of match games
 print(f'Match games: {match}')
@@ -564,7 +575,7 @@ plt.barh(x, cma_values, height = 0.4, align = 'edge', label = 'Tuned Parameters'
 plt.yticks(x, parameter_names)
 plt.xlabel('Parameter Value')
 plt.legend()
-plt.title('Comparison of Default and CMA KataGo Parameters')
+plt.title('Comparison of Default and Tuned KataGo Parameters')
 plt.show()
 
 games = 100 # number of games to verify goodness of Tuned KataGo command
