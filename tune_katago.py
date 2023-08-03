@@ -7,6 +7,7 @@ import cma
 import matplotlib.pyplot as plt
 import numpy as np
 import pairwiseclop
+import pandas as pd
 
 def translate_parameters(x: "list") -> "dict[str, float]":
     """Translate solutions into parameters
@@ -211,6 +212,42 @@ def program_a_play_with_b(a: "list", b: "list") -> int:
 
     return is_won
 
+def sphere(x: "list") -> float:
+    """Sphere function. A continuous, convex and unimodal function.
+
+    Args:
+        x (list): xi in [-5.12, 5.12] for each xi in x
+
+    Returns:
+        float: function value
+    """
+    y = [(xi ** 2) for xi in x]
+    f = reduce(lambda yi, yj: yi + yj, y)
+
+    return f
+
+def elliptic(x: "list") -> float:
+    """High conditioned elliptic function. A unimodal function.
+
+    Args:
+        x (list): xi in [-100, 100] for each xi in x
+
+    Returns:
+        float: function value
+    """
+    D = len(x)
+
+    if D <= 1:
+        c = 1
+    else:
+        c = [(1e6 ** (i / (D - 1))) for i in range(D)]
+
+    zipped = zip(c, x)
+    y = [(ci * (xi ** 2)) for (ci, xi) in zipped]
+    f = reduce(lambda yi, yj: yi + yj, y)
+
+    return f
+
 def rastrigin(x: "list") -> float:
     """Rastrigin function. A non-linear multimodal function.
 
@@ -248,12 +285,24 @@ def simulate_elo(a: "list") -> float:
     # Scale the parameters to the domain space of the Rastrigin function
     x = [5.12 * (ai - oi) for (ai, oi) in zipped]
 
-    # Get the rastrigin function value
-    f = rastrigin(x)
+    # Define test function
+    # test_function = sphere
+    test_function = elliptic
+    # test_function = rastrigin
+
+    # Get the function value
+    f = test_function(x)
 
     # Define the scaling factor for the function value.
     # A greater scaler makes the parameters more sensitive in the ELO rating.
-    scaler = 1
+    if test_function == sphere:
+        scaler = 1e2
+    elif test_function == elliptic:
+        scaler = 1e-3
+    elif test_function == rastrigin:
+        scaler = 1
+    else:
+        scaler = 1
 
     # Calculate the ELO rating
     elo = -scaler * f
@@ -290,7 +339,8 @@ def simulate_program_a_play_with_b(a: "list", b: "list") -> int:
         winrate = 1 / (1 + 10 ** ((fb - fa) / 400))
 
     # Result of a game
-    is_won = -1 if random() < winrate else 1
+    is_won = -1 if random() < winrate else 1 # stochastic
+    # is_won = -1 if 0.5 < winrate else 1 # deterministic
 
     return is_won
 
@@ -454,13 +504,8 @@ def run_pairwiseclop(x0: list, sigma0: float) -> list:
         # Translate parameters to solutions for CLOP
         solutions = [parameters[str(i)] for i in range(len(x0))]
 
-        # Handling boundaries
+        # Check boundaries
         for i in range(len(solutions)):
-            if solutions[i] < 0.0:
-                solutions[i] = 0.0
-            if solutions[i] > 1.0:
-                solutions[i] = 1.0
-
             assert solutions[i] >= 0.0
             assert solutions[i] <= 1.0
 
@@ -475,7 +520,13 @@ def run_pairwiseclop(x0: list, sigma0: float) -> list:
     # A function that returns a result of a game that is played by programs A and B
     result_of = simulate_program_a_play_with_b if simulation else program_a_play_with_b
 
-    for iteration in range(100):
+    # Initialize the iteration list
+    iterations = range(100)
+
+    # Initialize the optimum list
+    optimums = []
+
+    for iteration in iterations:
         for _ in range(10):
             # Sample parameters A to evaluate
             a = clop.sample_params_to_evaluate()
@@ -505,12 +556,199 @@ def run_pairwiseclop(x0: list, sigma0: float) -> list:
         # Get the current optimum
         optimum = parameters_to_solutions(clop.get_current_optimum())
 
+        # Append the optimum to the list
+        optimums.append(optimum)
+
         # Print the iteration and the current optimum
         print(f'Iteration: {iteration}, optimum: {optimum}')
 
+    if not simulation:
+        # Create a DataFrame from the lists
+        data = pd.DataFrame(
+            optimums,
+            index = iterations,
+            columns = [f'opt_{i}' for i in range(len(optimums[0]))]
+        )
+
+        # Create a line plot for each optimum
+        for col in data.columns:
+            plt.plot(data.index, data[col], label = col)
+
+        # Add labels and title
+        plt.xlabel('Iteration')
+        plt.ylabel('Optimum')
+        plt.title('Evolution of Optimums')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
     return optimum
 
-simulation = True # True: simulation; False: real games
+def tune(x0: list, sigma0: float) -> float:
+    global match, default_parameters
+
+    match = 0 # initialize a counter of match games
+
+    # Define the tuner
+    tuner = run_cma_fmin # stochastic optimizer CMA-ES
+    # tuner = run_pairwiseclop # pairwise CLOP
+
+    # Get tuned solutions
+    tuned_solutions = tuner(x0, sigma0)
+
+    # Print the number of match games
+    print(f'Match games: {match}')
+
+    # Print default parameters
+    print('=== Default KataGo parameters (start) ===')
+    print_parameters(default_parameters)
+    print('=== Default KataGo parameters (end) ===')
+
+    # Print tuned parameters
+    tuned_parameters = translate_parameters(tuned_solutions)
+    print('=== Tuned KataGo parameters (start) ===')
+    print_parameters(tuned_parameters)
+    print('=== Tuned KataGo parameters (end) ===')
+
+    if simulation:
+        default_elo = simulate_elo(default_solutions)
+        print(f'Elo of default KataGo parameters (simulation): {default_elo}')
+        tuned_elo = simulate_elo(tuned_solutions)
+        print(f'Elo of Tuned KataGo parameters (simulation): {tuned_elo}')
+        return tuned_elo
+
+    if not simulation:
+        # Parameter names are the same for both dictionaries
+        parameter_names = default_parameters.keys()
+        default_values = [default_parameters[k] for k in parameter_names]
+        cma_values = [tuned_parameters[k] for k in parameter_names]
+        x = range(len(parameter_names)) # indices of parameter names
+
+        # Visualize default and Tuned KataGo parameters
+        plt.figure()
+        plt.barh(x, default_values, height = 0.4, align = 'center', label = 'Default Parameters')
+        plt.barh(x, cma_values, height = 0.4, align = 'edge', label = 'Tuned Parameters')
+        plt.yticks(x, parameter_names)
+        plt.xlabel('Parameter Value')
+        plt.legend()
+        plt.title('Comparison of Default and Tuned KataGo Parameters')
+        plt.show()
+
+        games = 100 # number of games to verify goodness of Tuned KataGo command
+        print(f'Verifying goodness of Tuned KataGo command with {games} games...')
+        half_games = int(games / 2) # half of the number of games
+
+        # Match default KataGo (as black) and Tuned KataGo (as white)
+        (default_win, draw, cma_win) = match_program_a_and_b(default_solutions, tuned_solutions, half_games)
+
+        # Record the number of games that black wins
+        total_black_win = default_win
+
+        # Record the number of games that white wins
+        total_white_win = cma_win
+
+        # Record the numbers of winning and draw games
+        (total_default_win, total_draw, total_cma_win) = (default_win, draw, cma_win)
+
+        # Match Tuned KataGo (as black) and default KataGo (as white)
+        (cma_win, draw, default_win) = match_program_a_and_b(tuned_solutions, default_solutions, half_games)
+
+        # Record the number of games that black wins
+        total_black_win += cma_win
+
+        # Record the number of games that white wins
+        total_white_win += default_win
+
+        # Record the number of draw games
+        total_draw += draw
+
+        # Record the number of games that default KataGo wins
+        total_default_win += default_win
+
+        # Record the number of games that Tuned KataGo wins
+        total_cma_win += cma_win
+
+        print(f'Games: {games}')
+        print(f'Black:draw:white = {total_black_win}:{total_draw}:{total_white_win}')
+        print(f'Default:Tuned = {total_default_win}:{total_cma_win}')
+
+        # Binomial distribution under the null hypothesis
+        n_values = np.arange(games + 1) # possible number of wins for A
+        prob_values = binom.pmf(n_values, games, 0.5) # probabilities under the null hypothesis
+
+        # Calculate the cutoffs for the number of wins that correspond to a p-value of 0.05
+        lower_cutoff = 0
+        upper_cutoff = games
+        cumulative_prob = 0
+
+        # Calculate lower cutoff
+        for k in range(0, games + 1):
+            prob = binom.pmf(k, games, 0.5)
+            if cumulative_prob + prob < 0.025:
+                cumulative_prob += prob
+                lower_cutoff = k
+            else:
+                break
+
+        cumulative_prob = 0 # reset cumulative probability
+
+        # Calculate upper cutoff
+        for k in range(games, -1, -1):
+            prob = binom.pmf(k, games, 0.5)
+            if cumulative_prob + prob < 0.025:
+                cumulative_prob += prob
+                upper_cutoff = k
+            else:
+                break
+
+        # Plot the binomial distribution
+        plt.figure()
+
+        # Highlight the region of the distribution that is less extreme than the cutoffs
+        mask_not_extreme = np.logical_and(n_values > lower_cutoff, n_values < upper_cutoff) # region where null hypothesis is accepted
+
+        plt.bar(
+            n_values[mask_not_extreme],
+            prob_values[mask_not_extreme],
+            color = 'blue',
+            alpha = 0.7,
+            label = 'Region where $H_0$ is not rejected'
+        )
+
+        # Highlight the region of the distribution that is as extreme as or more extreme than the cutoffs
+        mask_extreme = np.logical_or(n_values <= lower_cutoff, n_values >= upper_cutoff) # region where null hypothesis is rejected
+
+        plt.bar(
+            n_values[mask_extreme],
+            prob_values[mask_extreme],
+            color = 'red',
+            alpha = 0.7,
+            label = 'Region where $H_0$ is rejected'
+        )
+
+        # Show where the actual number of wins stands
+        plt.axvline(x = total_cma_win, color = 'green', linestyle = '--')
+
+        plt.text(
+            total_cma_win + 1,
+            max(prob_values) / 2,
+            'Actual number of wins for Tuned',
+            color = 'green',
+            fontsize = 10
+        )
+
+        plt.xlabel('Number of wins for Tuned')
+        plt.ylabel('Probability')
+        plt.title('Binomial distribution under the null hypothesis')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+        # Pause to let users be able to view the diagrams
+        print('Press enter to continue...')
+        input()
+
+simulation = False # True: simulation; False: real games
 katago_exe = "/Users/chinchangyang/Links/katago-ccy" # Path to KataGo executable file
 gogui_classpath = "/Users/chinchangyang/Code/gogui/bin" # Class path of `GoGui`
 
@@ -538,156 +776,15 @@ if simulation:
     shift = lambda x, s: (x - s) if (x - s) > 0 else (x + s)
     simulated_optimum = [shift(x0i, sigma0) for x0i in x0]
 
-# Get tuned solutions by the stochastic optimizer CMA-ES
-# tuned_solutions = run_cma_fmin(x0, sigma0)
+tuned_num = 1
+tuned_elos = []
 
-# Get tuned solutions by the CLOP
-tuned_solutions = run_pairwiseclop(x0, sigma0)
+for _ in range(tuned_num):
+    tuned_elos.append(tune(x0, sigma0))
 
-# Print the number of match games
-print(f'Match games: {match}')
+print('=== Tuned ELOs (start) ===')
 
-# Print default parameters
-print('=== Default KataGo parameters (start) ===')
-print_parameters(default_parameters)
-print('=== Default KataGo parameters (end) ===')
+for tuned_elo in tuned_elos:
+    print(f'{tuned_elo}')
 
-# Print tuned parameters
-tuned_parameters = translate_parameters(tuned_solutions)
-print('=== Tuned KataGo parameters (start) ===')
-print_parameters(tuned_parameters)
-print('=== Tuned KataGo parameters (end) ===')
-
-if simulation:
-    print(f'Elo of default KataGo parameters (simulation): {simulate_elo(default_solutions)}')
-    print(f'Elo of Tuned KataGo parameters (simulation): {simulate_elo(tuned_solutions)}')
-
-# Parameter names are the same for both dictionaries
-parameter_names = default_parameters.keys()
-default_values = [default_parameters[k] for k in parameter_names]
-cma_values = [tuned_parameters[k] for k in parameter_names]
-x = range(len(parameter_names)) # indices of parameter names
-
-# Visualize default and Tuned KataGo parameters
-plt.figure()
-plt.barh(x, default_values, height = 0.4, align = 'center', label = 'Default Parameters')
-plt.barh(x, cma_values, height = 0.4, align = 'edge', label = 'Tuned Parameters')
-plt.yticks(x, parameter_names)
-plt.xlabel('Parameter Value')
-plt.legend()
-plt.title('Comparison of Default and Tuned KataGo Parameters')
-plt.show()
-
-games = 100 # number of games to verify goodness of Tuned KataGo command
-print(f'Verifying goodness of Tuned KataGo command with {games} games...')
-half_games = int(games / 2) # half of the number of games
-
-# Match default KataGo (as black) and Tuned KataGo (as white)
-(default_win, draw, cma_win) = match_program_a_and_b(default_solutions, tuned_solutions, half_games)
-
-# Record the number of games that black wins
-total_black_win = default_win
-
-# Record the number of games that white wins
-total_white_win = cma_win
-
-# Record the numbers of winning and draw games
-(total_default_win, total_draw, total_cma_win) = (default_win, draw, cma_win)
-
-# Match Tuned KataGo (as black) and default KataGo (as white)
-(cma_win, draw, default_win) = match_program_a_and_b(tuned_solutions, default_solutions, half_games)
-
-# Record the number of games that black wins
-total_black_win += cma_win
-
-# Record the number of games that white wins
-total_white_win += default_win
-
-# Record the number of draw games
-total_draw += draw
-
-# Record the number of games that default KataGo wins
-total_default_win += default_win
-
-# Record the number of games that Tuned KataGo wins
-total_cma_win += cma_win
-
-print(f'Games: {games}')
-print(f'Black:draw:white = {total_black_win}:{total_draw}:{total_white_win}')
-print(f'Default:Tuned = {total_default_win}:{total_cma_win}')
-
-# Binomial distribution under the null hypothesis
-n_values = np.arange(games + 1) # possible number of wins for A
-prob_values = binom.pmf(n_values, games, 0.5) # probabilities under the null hypothesis
-
-# Calculate the cutoffs for the number of wins that correspond to a p-value of 0.05
-lower_cutoff = 0
-upper_cutoff = games
-cumulative_prob = 0
-
-# Calculate lower cutoff
-for k in range(0, games + 1):
-    prob = binom.pmf(k, games, 0.5)
-    if cumulative_prob + prob < 0.025:
-        cumulative_prob += prob
-        lower_cutoff = k
-    else:
-        break
-
-cumulative_prob = 0 # reset cumulative probability
-
-# Calculate upper cutoff
-for k in range(games, -1, -1):
-    prob = binom.pmf(k, games, 0.5)
-    if cumulative_prob + prob < 0.025:
-        cumulative_prob += prob
-        upper_cutoff = k
-    else:
-        break
-
-# Plot the binomial distribution
-plt.figure()
-
-# Highlight the region of the distribution that is less extreme than the cutoffs
-mask_not_extreme = np.logical_and(n_values > lower_cutoff, n_values < upper_cutoff) # region where null hypothesis is accepted
-
-plt.bar(
-    n_values[mask_not_extreme],
-    prob_values[mask_not_extreme],
-    color = 'blue',
-    alpha = 0.7,
-    label = 'Region where $H_0$ is not rejected'
-)
-
-# Highlight the region of the distribution that is as extreme as or more extreme than the cutoffs
-mask_extreme = np.logical_or(n_values <= lower_cutoff, n_values >= upper_cutoff) # region where null hypothesis is rejected
-
-plt.bar(
-    n_values[mask_extreme],
-    prob_values[mask_extreme],
-    color = 'red',
-    alpha = 0.7,
-    label = 'Region where $H_0$ is rejected'
-)
-
-# Show where the actual number of wins stands
-plt.axvline(x = total_cma_win, color = 'green', linestyle = '--')
-
-plt.text(
-    total_cma_win + 1,
-    max(prob_values) / 2,
-    'Actual number of wins for Tuned',
-    color = 'green',
-    fontsize = 10
-)
-
-plt.xlabel('Number of wins for Tuned')
-plt.ylabel('Probability')
-plt.title('Binomial distribution under the null hypothesis')
-plt.legend()
-plt.grid(True)
-plt.show()
-
-# Pause to let users be able to view the diagrams
-print('Press enter to continue...')
-input()
+print('=== Tuned ELOs (end) ===')
