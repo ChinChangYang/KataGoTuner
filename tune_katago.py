@@ -248,6 +248,47 @@ def elliptic(x: "list") -> float:
 
     return f
 
+def rotation_matrix_pair(theta: float, dim: int, i: int, j: int):
+    """Rotation matrix for a pair
+
+    Args:
+        theta (float): rotation theta
+        dim (int): dimension
+        i (int): first index
+        j (int): second index
+
+    Returns:
+        ndarray: rotation matrix
+    """
+    rotation = np.eye(dim)
+    rotation[i, i] = np.cos(theta)
+    rotation[i, j] = -np.sin(theta)
+    rotation[j, i] = np.sin(theta)
+    rotation[j, j] = np.cos(theta)
+
+    return rotation
+
+def rotated_elliptic(x: "list", theta=np.radians(30)) -> float:
+    """Rotated elliptic function. A unimodal, and non-separable function.
+
+    Args:
+        x (list): xi in [-100, 100] for each xi in x
+        theta (float, optional): rotation theta. Defaults to np.radians(30).
+
+    Returns:
+        float: function value
+    """
+    # Determine the dimension of x
+    D = len(x)
+    # Initialize the rotated x as the original x
+    x_rot = np.array(x)
+    # Apply the rotation matrix for each pair of dimensions
+    for i in range(D - 1):
+        for j in range(i + 1, D):
+            x_rot = np.dot(rotation_matrix_pair(theta, D, i, j), x_rot)
+    # Compute the elliptic function value at the rotated x
+    return elliptic(x_rot)
+
 def rastrigin(x: "list") -> float:
     """Rastrigin function. A non-linear multimodal function.
 
@@ -282,12 +323,13 @@ def simulate_elo(a: "list") -> float:
     # Combine the parameters and the default solutions
     zipped = zip(a, simulated_optimum)
 
-    # Scale the parameters to the domain space of the Rastrigin function
-    x = [5.12 * (ai - oi) for (ai, oi) in zipped]
+    # Scale the parameters to the domain space of the test function
+    x = [100.0 * (ai - oi) for (ai, oi) in zipped]
 
     # Define test function
     # test_function = sphere
-    test_function = elliptic
+    # test_function = elliptic
+    test_function = rotated_elliptic
     # test_function = rastrigin
 
     # Get the function value
@@ -296,11 +338,13 @@ def simulate_elo(a: "list") -> float:
     # Define the scaling factor for the function value.
     # A greater scaler makes the parameters more sensitive in the ELO rating.
     if test_function == sphere:
-        scaler = 1e2
+        scaler = 1e-1
     elif test_function == elliptic:
-        scaler = 1e-3
+        scaler = 1e-6
+    elif test_function == rotated_elliptic:
+        scaler = 1e-7
     elif test_function == rastrigin:
-        scaler = 1
+        scaler = 1e-1
     else:
         scaler = 1
 
@@ -769,17 +813,18 @@ assert(default_solutions == translate_solutions(translate_parameters(default_sol
 
 match = 0 # initialize a counter of match games
 x0 = default_solutions # initial guess of minimum solution
-sigma0 = 0.1 # initial standard deviation in each coordinate
+sigma0 = 0.2 # initial standard deviation in each coordinate
 
 # Define simulated optimum
 if simulation:
     shift = lambda x, s: (x - s) if (x - s) > 0 else (x + s)
     simulated_optimum = [shift(x0i, sigma0) for x0i in x0]
 
-tuned_num = 1
-tuned_elos = []
+tuned_num = 1 # number of tuned ELOs
+tuned_elos = [] # initialize tuned ELOs
 
 for _ in range(tuned_num):
+    # Append tuned ELO
     tuned_elos.append(tune(x0, sigma0))
 
 print('=== Tuned ELOs (start) ===')
