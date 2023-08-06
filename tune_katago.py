@@ -668,6 +668,38 @@ def elo_range(M: int, N: int, a: float) -> float:
         elo_positive_delta = elo(M + delta, N) # ELO with positive delta
         elo_negative_delta = elo(M - delta, N) # ELO with negative delta
         return (elo_negative_delta, elo_positive_delta)
+    
+def plot_elo_range(M: int, N: int):
+    global plotting
+
+    if plotting:
+        expected_elo = elo(M, N)
+
+        ranges = {
+            '1.0 SD': elo_range(M, N, 1.0),
+            '2.0 SD': elo_range(M, N, 2.0),
+            '3.0 SD': elo_range(M, N, 3.0)
+        }
+
+        # Plotting
+        _, ax = plt.subplots()
+        colors = ['blue', 'green', 'red']
+
+        for idx, (label, (low, high)) in enumerate(ranges.items()):
+            ax.plot([low, high], [idx, idx], color=colors[idx], label=label, linewidth=10)
+            ax.scatter([low, high], [idx, idx], color=colors[idx], s=50)
+
+        ax.scatter(expected_elo, idx + 1, color='black', s=100, marker='X', label="Expected Tuned ELO")
+        ax.axvline(x=expected_elo, color='black', linestyle='--')
+        ax.set_yticks(list(range(len(ranges) + 1)))
+        ax.set_yticklabels(list(ranges.keys()) + ["Expected Tuned ELO"])
+        ax.set_title("Tuned ELO Ranges with Standard Deviations")
+        ax.set_xlabel("ELO Value")
+        ax.set_ylabel("Standard Deviations")
+        ax.legend()
+        plt.tight_layout()
+        plt.grid(True)
+        plt.show()
 
 def tune(x0: list, sigma0: float) -> float:
     global match, default_parameters, plotting
@@ -716,6 +748,7 @@ def tune(x0: list, sigma0: float) -> float:
         plt.xlabel('Parameter Value')
         plt.legend()
         plt.title('Comparison of Default and Tuned KataGo Parameters')
+        plt.tight_layout()
         plt.show()
 
     games = 100 # number of games to verify goodness of Tuned KataGo command
@@ -755,14 +788,16 @@ def tune(x0: list, sigma0: float) -> float:
     # Expected ELO
     tuned_elo = elo(total_cma_win, games)
 
-    # ELO (+/- 2.0 standard deviation)
-    tuned_elo_range = elo_range(total_cma_win, games, 2.0)
-
     print(f'Games: {games}')
     print(f'Black:draw:white = {total_black_win}:{total_draw}:{total_white_win}')
     print(f'Default:Tuned = {total_default_win}:{total_cma_win}')
     print(f'Expected Tuned ELO = {tuned_elo}')
-    print(f'Tuned ELO range (+/- 2.0 standard deviation) = {tuned_elo_range}')
+    print(f'Tuned ELO range (+/- 1.0 standard deviation) = {elo_range(total_cma_win, games, 1.0)}')
+    print(f'Tuned ELO range (+/- 2.0 standard deviation) = {elo_range(total_cma_win, games, 2.0)}')
+    print(f'Tuned ELO range (+/- 3.0 standard deviation) = {elo_range(total_cma_win, games, 3.0)}')
+
+    # Plot ELO ranges
+    plot_elo_range(total_cma_win, games)
 
     if plotting:
         # Binomial distribution under the null hypothesis
