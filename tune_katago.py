@@ -10,6 +10,7 @@ import pairwiseclop
 import pandas as pd
 import math
 
+
 def translate_parameters(x: "list") -> "dict[str, float]":
     """Translate solutions into parameters
 
@@ -28,6 +29,7 @@ def translate_parameters(x: "list") -> "dict[str, float]":
 
     return parameters
 
+
 def translate_solutions(y: "dict[str, float]") -> "list":
     """Translate parameters into solutions
 
@@ -44,6 +46,7 @@ def translate_solutions(y: "dict[str, float]") -> "list":
     ]
 
     return solutions
+
 
 def get_katago_parameters(x: "list") -> "dict[str, float]":
     """Get KataGo parameters from a list of values within [0, 1]
@@ -95,6 +98,7 @@ def get_katago_parameters(x: "list") -> "dict[str, float]":
 
     return parameters
 
+
 def get_katago_command(x: "list") -> str:
     """Translate parameters into a KataGo command
 
@@ -113,8 +117,9 @@ def get_katago_command(x: "list") -> str:
     command = f'{katago_exe} gtp '
     for key, value in parameters.items():
         command += f'-override-config {key}={value} '
-    
-    return command.strip() # Remove trailing space
+
+    return command.strip()  # Remove trailing space
+
 
 def spawn_process(command: "list[str]"):
     """Spawn a process with the command and wait until the process ends.
@@ -128,6 +133,7 @@ def spawn_process(command: "list[str]"):
     except Exception as e:
         print(f"Error occurred: {str(e)}")
 
+
 def get_prefix_sgffile() -> str:
     """Get a new prefix of SGF file name
 
@@ -138,6 +144,7 @@ def get_prefix_sgffile() -> str:
     prefix_sgffile = f'match-{match}'
     match = match + 1
     return prefix_sgffile
+
 
 def program_a_play_with_b(a: "list", b: "list") -> int:
     """Spawn a process of `twogtp` that hosts a game to let program A play with program B
@@ -208,6 +215,7 @@ def program_a_play_with_b(a: "list", b: "list") -> int:
 
     return is_won
 
+
 def sphere(x: "list") -> float:
     """Sphere function. A continuous, convex and unimodal function.
 
@@ -221,6 +229,7 @@ def sphere(x: "list") -> float:
     f = reduce(lambda yi, yj: yi + yj, y)
 
     return f
+
 
 def elliptic(x: "list") -> float:
     """High conditioned elliptic function. A unimodal function.
@@ -244,6 +253,7 @@ def elliptic(x: "list") -> float:
 
     return f
 
+
 def rotation_matrix_pair(theta: float, dim: int, i: int, j: int):
     """Rotation matrix for a pair
 
@@ -263,6 +273,7 @@ def rotation_matrix_pair(theta: float, dim: int, i: int, j: int):
     rotation[j, j] = np.cos(theta)
 
     return rotation
+
 
 def rotated_elliptic(x: "list", theta=np.radians(30)) -> float:
     """Rotated elliptic function. A unimodal, and non-separable function.
@@ -285,6 +296,7 @@ def rotated_elliptic(x: "list", theta=np.radians(30)) -> float:
     # Compute the elliptic function value at the rotated x
     return elliptic(x_rot)
 
+
 def rastrigin(x: "list") -> float:
     """Rastrigin function. A non-linear multimodal function.
 
@@ -300,6 +312,7 @@ def rastrigin(x: "list") -> float:
     f = (A * n) + reduce(lambda yi, yj: yi + yj, y)
 
     return f
+
 
 def simulate_elo(a: "list") -> float:
     """Simulates ELO rating for given parameters.
@@ -349,6 +362,7 @@ def simulate_elo(a: "list") -> float:
 
     return elo
 
+
 def simulate_program_a_play_with_b(a: "list", b: "list") -> int:
     """Simulate a result of a game where program A plays with program B
 
@@ -379,10 +393,11 @@ def simulate_program_a_play_with_b(a: "list", b: "list") -> int:
         winrate = 1 / (1 + 10 ** ((fb - fa) / 400))
 
     # Result of a game
-    is_won = -1 if random() < winrate else 1 # stochastic
+    is_won = -1 if random() < winrate else 1  # stochastic
     # is_won = -1 if 0.5 < winrate else 1 # deterministic
 
     return is_won
+
 
 def is_program_a_superior_than_b(a: "tuple", b: "tuple") -> int:
     """Get a flag to indicate whether program A is superior than program B
@@ -421,6 +436,7 @@ def is_program_a_superior_than_b(a: "tuple", b: "tuple") -> int:
 
     return is_superior
 
+
 def ranking(X: "list") -> "list":
     """Ranking a list of parameters
 
@@ -444,6 +460,7 @@ def ranking(X: "list") -> "list":
     F = [zi[0] - match for zi in Z]
 
     return F
+
 
 def match_program_a_and_b(a: "list", b: "list", games: int):
     """Match program A and program B
@@ -484,9 +501,11 @@ def match_program_a_and_b(a: "list", b: "list", games: int):
 
     return (a_win, draw, b_win)
 
+
 def print_parameters(parameters: "dict[str, float]"):
     for name in parameters:
         print(f'{name}: {parameters[name]}')
+
 
 def run_cma_fmin(x0: list, sigma0: float) -> list:
     """Run CMA-ES fmin function
@@ -499,15 +518,17 @@ def run_cma_fmin(x0: list, sigma0: float) -> list:
         list: tuned solutions
     """
     # Modify CMA options
-    options = cma.CMAOptions() # initialize CMA options
-    options.set('bounds', [0, 1]) # lower and upper boundaries of parameters
-    options.set('popsize', 10 * len(x0)) # population size
-    options.set('tolx', 1e-2) # tolerance in solution changes
-    options.set('maxfevals', 2e4) # maximum number of function evaluations
-    options.set('tolconditioncov', 1e12) # tolerance in condition of the covariance matrix
+    options = cma.CMAOptions()  # initialize CMA options
+    options.set('bounds', [0, 1])  # lower and upper boundaries of parameters
+    options.set('popsize', 10 * len(x0))  # population size
+    options.set('tolx', 1e-2)  # tolerance in solution changes
+    options.set('maxfevals', 2e4)  # maximum number of function evaluations
+    # tolerance in condition of the covariance matrix
+    options.set('tolconditioncov', 1e12)
 
     # Run the stochastic optimizer CMA-ES
-    result = cma.fmin(None, x0, sigma0, options=options, parallel_objective=ranking)
+    result = cma.fmin(None, x0, sigma0, options=options,
+                      parallel_objective=ranking)
 
     # Plot CMA-ES data from files
     cma.plot()
@@ -517,6 +538,7 @@ def run_cma_fmin(x0: list, sigma0: float) -> list:
 
     return result[5]
 
+
 def plot_pairwiseclop(optimums, iterations):
     global plotting
 
@@ -524,13 +546,13 @@ def plot_pairwiseclop(optimums, iterations):
         # Create a DataFrame from the lists
         data = pd.DataFrame(
             optimums,
-            index = range(iterations),
-            columns = [f'opt_{i}' for i in range(len(optimums[0]))]
+            index=range(iterations),
+            columns=[f'opt_{i}' for i in range(len(optimums[0]))]
         )
 
         # Create a line plot for each optimum
         for col in data.columns:
-            plt.plot(data.index, data[col], label = col)
+            plt.plot(data.index, data[col], label=col)
 
         # Add labels and title
         plt.xlabel('Iteration')
@@ -539,6 +561,7 @@ def plot_pairwiseclop(optimums, iterations):
         plt.legend()
         plt.grid(True)
         plt.show()
+
 
 def run_pairwiseclop(x0: list, sigma0: float) -> list:
     """Run pairwise CLOP
@@ -576,7 +599,7 @@ def run_pairwiseclop(x0: list, sigma0: float) -> list:
             assert solutions[i] <= 1.0
 
         return solutions
-    
+
     # Initialize CLOP
     clop = pairwiseclop.PairwiseCLOP(parameters)
 
@@ -608,10 +631,10 @@ def run_pairwiseclop(x0: list, sigma0: float) -> list:
 
             if is_won == -1:
                 # Program A won
-                clop.add_win(winner = a, loser = b)
+                clop.add_win(winner=a, loser=b)
             elif is_won == 1:
                 # Program B won
-                clop.add_win(winner = b, loser = a)
+                clop.add_win(winner=b, loser=a)
             else:
                 # Draw
                 clop.add_draw(a, b)
@@ -632,6 +655,7 @@ def run_pairwiseclop(x0: list, sigma0: float) -> list:
 
     return optimum
 
+
 def elo(M: float, N: float) -> float:
     """Calculate expected ELO
 
@@ -649,6 +673,7 @@ def elo(M: float, N: float) -> float:
     else:
         return -400 * math.log10(-1 + (N / M))
 
+
 def elo_range(M: int, N: int, a: float) -> float:
     """Calculate ELO standard deviation
 
@@ -664,14 +689,15 @@ def elo_range(M: int, N: int, a: float) -> float:
     elif M == 0:
         return (float('-inf'), float('-inf'))
     else:
-        p = M / N # mean
-        var = bernoulli.var(p) / N # variance of sample mean
-        stdev = math.sqrt(var) # standard deviation
-        delta = a * stdev * N # delta for M
-        elo_positive_delta = elo(M + delta, N) # ELO with positive delta
-        elo_negative_delta = elo(M - delta, N) # ELO with negative delta
+        p = M / N  # mean
+        var = bernoulli.var(p) / N  # variance of sample mean
+        stdev = math.sqrt(var)  # standard deviation
+        delta = a * stdev * N  # delta for M
+        elo_positive_delta = elo(M + delta, N)  # ELO with positive delta
+        elo_negative_delta = elo(M - delta, N)  # ELO with negative delta
         return (elo_negative_delta, elo_positive_delta)
-    
+
+
 def plot_elo_range(M: int, N: int):
     global plotting
 
@@ -689,10 +715,12 @@ def plot_elo_range(M: int, N: int):
         colors = ['blue', 'green', 'red']
 
         for idx, (label, (low, high)) in enumerate(ranges.items()):
-            ax.plot([low, high], [idx, idx], color=colors[idx], label=label, linewidth=10)
+            ax.plot([low, high], [idx, idx], color=colors[idx],
+                    label=label, linewidth=10)
             ax.scatter([low, high], [idx, idx], color=colors[idx], s=50)
 
-        ax.scatter(expected_elo, idx + 1, color='black', s=100, marker='X', label="Expected Tuned ELO")
+        ax.scatter(expected_elo, idx + 1, color='black', s=100,
+                   marker='X', label="Expected Tuned ELO")
         ax.axvline(x=expected_elo, color='black', linestyle='--')
         ax.set_yticks(list(range(len(ranges) + 1)))
         ax.set_yticklabels(list(ranges.keys()) + ["Expected Tuned ELO"])
@@ -704,14 +732,15 @@ def plot_elo_range(M: int, N: int):
         plt.grid(True)
         plt.show()
 
+
 def tune(x0: list, sigma0: float) -> float:
     global match, default_parameters, plotting
 
-    match = 0 # initialize a counter of match games
+    match = 0  # initialize a counter of match games
 
     # Define the tuner
     # tuner = run_cma_fmin # stochastic optimizer CMA-ES
-    tuner = run_pairwiseclop # pairwise CLOP
+    tuner = run_pairwiseclop  # pairwise CLOP
 
     # Get tuned solutions
     tuned_solutions = tuner(x0, sigma0)
@@ -742,12 +771,14 @@ def tune(x0: list, sigma0: float) -> float:
         parameter_names = default_parameters.keys()
         default_values = [default_parameters[k] for k in parameter_names]
         cma_values = [tuned_parameters[k] for k in parameter_names]
-        x = range(len(parameter_names)) # indices of parameter names
+        x = range(len(parameter_names))  # indices of parameter names
 
         # Visualize default and Tuned KataGo parameters
         plt.figure()
-        plt.barh(x, default_values, height = 0.4, align = 'center', label = 'Default Parameters')
-        plt.barh(x, cma_values, height = 0.4, align = 'edge', label = 'Tuned Parameters')
+        plt.barh(x, default_values, height=0.4,
+                 align='center', label='Default Parameters')
+        plt.barh(x, cma_values, height=0.4,
+                 align='edge', label='Tuned Parameters')
         plt.yticks(x, parameter_names)
         plt.xlabel('Parameter Value')
         plt.legend()
@@ -755,12 +786,13 @@ def tune(x0: list, sigma0: float) -> float:
         plt.tight_layout()
         plt.show()
 
-    games = 200 # number of games to verify goodness of Tuned KataGo command
+    games = 200  # number of games to verify goodness of Tuned KataGo command
     print(f'Verifying goodness of Tuned KataGo command with {games} games...')
-    half_games = int(games / 2) # half of the number of games
+    half_games = int(games / 2)  # half of the number of games
 
     # Match default KataGo (as black) and Tuned KataGo (as white)
-    (default_win, draw, cma_win) = match_program_a_and_b(default_solutions, tuned_solutions, half_games)
+    (default_win, draw, cma_win) = match_program_a_and_b(
+        default_solutions, tuned_solutions, half_games)
 
     # Record the number of games that black wins
     total_black_win = default_win
@@ -772,7 +804,8 @@ def tune(x0: list, sigma0: float) -> float:
     (total_default_win, total_draw, total_cma_win) = (default_win, draw, cma_win)
 
     # Match Tuned KataGo (as black) and default KataGo (as white)
-    (cma_win, draw, default_win) = match_program_a_and_b(tuned_solutions, default_solutions, half_games)
+    (cma_win, draw, default_win) = match_program_a_and_b(
+        tuned_solutions, default_solutions, half_games)
 
     # Record the number of games that black wins
     total_black_win += cma_win
@@ -793,21 +826,26 @@ def tune(x0: list, sigma0: float) -> float:
     tuned_elo = elo(total_cma_win, games)
 
     print(f'Games: {games}')
-    print(f'Black:draw:white = {total_black_win}:{total_draw}:{total_white_win}')
+    print(
+        f'Black:draw:white = {total_black_win}:{total_draw}:{total_white_win}')
     print(f'Default:Tuned = {total_default_win}:{total_cma_win}')
     print(f'ELO of default parameters = 0')
     print(f'Expected ELO of tuned parameters = {tuned_elo}')
-    print(f'ELO range (+/- 1.0 standard deviation) = {elo_range(total_cma_win, games, 1.0)}')
-    print(f'ELO range (+/- 2.0 standard deviation) = {elo_range(total_cma_win, games, 2.0)}')
-    print(f'ELO range (+/- 3.0 standard deviation) = {elo_range(total_cma_win, games, 3.0)}')
+    print(
+        f'ELO range (+/- 1.0 standard deviation) = {elo_range(total_cma_win, games, 1.0)}')
+    print(
+        f'ELO range (+/- 2.0 standard deviation) = {elo_range(total_cma_win, games, 2.0)}')
+    print(
+        f'ELO range (+/- 3.0 standard deviation) = {elo_range(total_cma_win, games, 3.0)}')
 
     # Plot ELO ranges
     plot_elo_range(total_cma_win, games)
 
     if plotting:
         # Binomial distribution under the null hypothesis
-        n_values = np.arange(games + 1) # possible number of wins for A
-        prob_values = binom.pmf(n_values, games, 0.5) # probabilities under the null hypothesis
+        n_values = np.arange(games + 1)  # possible number of wins for A
+        # probabilities under the null hypothesis
+        prob_values = binom.pmf(n_values, games, 0.5)
 
         # Calculate the cutoffs for the number of wins that correspond to a p-value of 0.05
         lower_cutoff = 0
@@ -823,7 +861,7 @@ def tune(x0: list, sigma0: float) -> float:
             else:
                 break
 
-        cumulative_prob = 0 # reset cumulative probability
+        cumulative_prob = 0  # reset cumulative probability
 
         # Calculate upper cutoff
         for k in range(games, -1, -1):
@@ -838,36 +876,40 @@ def tune(x0: list, sigma0: float) -> float:
         plt.figure()
 
         # Highlight the region of the distribution that is less extreme than the cutoffs
-        mask_not_extreme = np.logical_and(n_values > lower_cutoff, n_values < upper_cutoff) # region where null hypothesis is accepted
+        # where null hypothesis is accepted
+        mask_not_extreme = np.logical_and(
+            n_values > lower_cutoff, n_values < upper_cutoff)
 
         plt.bar(
             n_values[mask_not_extreme],
             prob_values[mask_not_extreme],
-            color = 'blue',
-            alpha = 0.7,
-            label = 'Region where $H_0$ is not rejected'
+            color='blue',
+            alpha=0.7,
+            label='Region where $H_0$ is not rejected'
         )
 
         # Highlight the region of the distribution that is as extreme as or more extreme than the cutoffs
-        mask_extreme = np.logical_or(n_values <= lower_cutoff, n_values >= upper_cutoff) # region where null hypothesis is rejected
+        # where null hypothesis is rejected
+        mask_extreme = np.logical_or(
+            n_values <= lower_cutoff, n_values >= upper_cutoff)
 
         plt.bar(
             n_values[mask_extreme],
             prob_values[mask_extreme],
-            color = 'red',
-            alpha = 0.7,
-            label = 'Region where $H_0$ is rejected'
+            color='red',
+            alpha=0.7,
+            label='Region where $H_0$ is rejected'
         )
 
         # Show where the actual number of wins stands
-        plt.axvline(x = total_cma_win, color = 'green', linestyle = '--')
+        plt.axvline(x=total_cma_win, color='green', linestyle='--')
 
         plt.text(
             total_cma_win + 1,
             max(prob_values) / 2,
             'Actual number of wins for Tuned',
-            color = 'green',
-            fontsize = 10
+            color='green',
+            fontsize=10
         )
 
         plt.xlabel('Number of wins for Tuned')
@@ -883,10 +925,12 @@ def tune(x0: list, sigma0: float) -> float:
 
     return tuned_elo
 
-simulation = True # True: simulation; False: real games
-plotting = True # draw diagrams
-katago_exe = "/Users/chinchangyang/Links/katago-ccy" # Path to KataGo executable file
-gogui_classpath = "/Users/chinchangyang/Code/gogui/bin" # Class path of `GoGui`
+
+simulation = True  # True: simulation; False: real games
+plotting = True  # draw diagrams
+# Path to KataGo executable file
+katago_exe = "/Users/chinchangyang/Links/katago-ccy"
+gogui_classpath = "/Users/chinchangyang/Code/gogui/bin"  # Class path of `GoGui`
 
 # Default KataGo parameters
 default_parameters = {
@@ -900,19 +944,20 @@ default_parameters = {
 default_solutions = translate_solutions(default_parameters)
 
 # Sanity check
-assert(default_solutions == translate_solutions(translate_parameters(default_solutions)))
+assert(default_solutions == translate_solutions(
+    translate_parameters(default_solutions)))
 
-match = 0 # initialize a counter of match games
-x0 = default_solutions # initial guess of minimum solution
-sigma0 = 0.2 # initial standard deviation in each coordinate
+match = 0  # initialize a counter of match games
+x0 = default_solutions  # initial guess of minimum solution
+sigma0 = 0.2  # initial standard deviation in each coordinate
 
 # Define simulated optimum
 if simulation:
-    shift = lambda x, s: (x - s) if (x - s) > 0 else (x + s)
+    def shift(x, s): return (x - s) if (x - s) > 0 else (x + s)
     simulated_optimum = [shift(x0i, sigma0) for x0i in x0]
 
-tuned_num = 1 # number of tuned ELOs
-tuned_elos = [] # initialize tuned ELOs
+tuned_num = 1  # number of tuned ELOs
+tuned_elos = []  # initialize tuned ELOs
 
 for _ in range(tuned_num):
     # Append tuned ELO
