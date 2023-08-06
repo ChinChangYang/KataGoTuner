@@ -524,7 +524,7 @@ def plot_pairwiseclop(optimums, iterations):
         # Create a DataFrame from the lists
         data = pd.DataFrame(
             optimums,
-            index = iterations,
+            index = range(iterations),
             columns = [f'opt_{i}' for i in range(len(optimums[0]))]
         )
 
@@ -584,12 +584,12 @@ def run_pairwiseclop(x0: list, sigma0: float) -> list:
     result_of = simulate_program_a_play_with_b if simulation else program_a_play_with_b
 
     # Initialize the iteration list
-    iterations = range(100)
+    iterations = 100
 
     # Initialize the optimum list
     optimums = []
 
-    for iteration in iterations:
+    for iteration in range(iterations):
         for _ in range(10):
             # Sample parameters A to evaluate
             a = clop.sample_params_to_evaluate()
