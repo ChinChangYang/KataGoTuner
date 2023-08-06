@@ -1,6 +1,6 @@
 from functools import reduce, cmp_to_key
 import subprocess
-from scipy.stats import norm, binom
+from scipy.stats import binom, bernoulli
 from random import random
 from sgfmill import sgf
 import cma
@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pairwiseclop
 import pandas as pd
+import math
 
 def translate_parameters(x: "list") -> "dict[str, float]":
     """Translate solutions into parameters
@@ -20,13 +21,10 @@ def translate_parameters(x: "list") -> "dict[str, float]":
     """
     parameters = {
         "cpuctExploration": (x[0] * 4.0),
-        "cpuctExplorationLog": (x[1] * 1.80),
-        "winLossUtilityFactor": (x[2] * 1.0),
-        "staticScoreUtilityFactor": (x[3] * 1.0),
-        "dynamicScoreUtilityFactor": (x[4] * 1.0),
+        "cpuctExplorationLog": (x[0] * 1.80),
+        "staticScoreUtilityFactor": (x[1] * 1.0),
+        "dynamicScoreUtilityFactor": (x[2] * 1.0),
     }
-
-    assert len(x) == len(parameters.keys())
 
     return parameters
 
@@ -41,8 +39,6 @@ def translate_solutions(y: "dict[str, float]") -> "list":
     """
     solutions = [
         y["cpuctExploration"] / 4.0,
-        y["cpuctExplorationLog"] / 1.80,
-        y["winLossUtilityFactor"] / 1.0,
         y["staticScoreUtilityFactor"] / 1.0,
         y["dynamicScoreUtilityFactor"] / 1.0,
     ]
@@ -61,7 +57,7 @@ def get_katago_parameters(x: "list") -> "dict[str, float]":
     sub_parameters = translate_parameters(x)
 
     parameters = {
-        "maxVisits": 16,
+        "maxVisits": 256,
         "numSearchThreads": 2,
         "chosenMoveTemperatureEarly": 0.5,
         "chosenMoveTemperatureHalflife": 19,
@@ -71,7 +67,7 @@ def get_katago_parameters(x: "list") -> "dict[str, float]":
         "rootNumSymmetriesToSample": 1,
         "lcbStdevs": 5.0,
         "minVisitPropForLCB": 0.15,
-        "winLossUtilityFactor": sub_parameters["winLossUtilityFactor"],
+        "winLossUtilityFactor": 1.0,
         "staticScoreUtilityFactor": sub_parameters["staticScoreUtilityFactor"],
         "dynamicScoreUtilityFactor": sub_parameters["dynamicScoreUtilityFactor"],
         "dynamicScoreCenterZeroWeight": 0.20,
@@ -521,6 +517,29 @@ def run_cma_fmin(x0: list, sigma0: float) -> list:
 
     return result[5]
 
+def plot_pairwiseclop(optimums, iterations):
+    global plotting
+
+    if plotting:
+        # Create a DataFrame from the lists
+        data = pd.DataFrame(
+            optimums,
+            index = iterations,
+            columns = [f'opt_{i}' for i in range(len(optimums[0]))]
+        )
+
+        # Create a line plot for each optimum
+        for col in data.columns:
+            plt.plot(data.index, data[col], label = col)
+
+        # Add labels and title
+        plt.xlabel('Iteration')
+        plt.ylabel('Optimum')
+        plt.title('Evolution of Optimums')
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
 def run_pairwiseclop(x0: list, sigma0: float) -> list:
     """Run pairwise CLOP
 
@@ -606,36 +625,58 @@ def run_pairwiseclop(x0: list, sigma0: float) -> list:
         # Print the iteration and the current optimum
         print(f'Iteration: {iteration}, optimum: {optimum}')
 
-    if not simulation:
-        # Create a DataFrame from the lists
-        data = pd.DataFrame(
-            optimums,
-            index = iterations,
-            columns = [f'opt_{i}' for i in range(len(optimums[0]))]
-        )
-
-        # Create a line plot for each optimum
-        for col in data.columns:
-            plt.plot(data.index, data[col], label = col)
-
-        # Add labels and title
-        plt.xlabel('Iteration')
-        plt.ylabel('Optimum')
-        plt.title('Evolution of Optimums')
-        plt.legend()
-        plt.grid(True)
-        plt.show()
+    plot_pairwiseclop(optimums, iterations)
 
     return optimum
 
+def elo(M: float, N: float) -> float:
+    """Calculate expected ELO
+
+    Args:
+        M (float): Number of wins
+        N (float): Number of games
+
+    Returns:
+        float: expected ELO
+    """
+    if N <= M:
+        return float('inf')
+    elif M <= 0:
+        return float('-inf')
+    else:
+        return -400 * math.log10(-1 + (N / M))
+
+def elo_range(M: int, N: int, a: float) -> float:
+    """Calculate ELO standard deviation
+
+    Args:
+        M (int): Number of wins
+        N (int): Number of games
+
+    Returns:
+        float: ELO standard deviation
+    """
+    if N == M:
+        return (float('inf'), float('inf'))
+    elif M == 0:
+        return (float('-inf'), float('-inf'))
+    else:
+        p = M / N # mean
+        var = bernoulli.var(p) / N # variance of sample mean
+        stdev = math.sqrt(var) # standard deviation
+        delta = a * stdev * N # delta for M
+        elo_positive_delta = elo(M + delta, N) # ELO with positive delta
+        elo_negative_delta = elo(M - delta, N) # ELO with negative delta
+        return (elo_negative_delta, elo_positive_delta)
+
 def tune(x0: list, sigma0: float) -> float:
-    global match, default_parameters
+    global match, default_parameters, plotting
 
     match = 0 # initialize a counter of match games
 
     # Define the tuner
-    tuner = run_cma_fmin # stochastic optimizer CMA-ES
-    # tuner = run_pairwiseclop # pairwise CLOP
+    # tuner = run_cma_fmin # stochastic optimizer CMA-ES
+    tuner = run_pairwiseclop # pairwise CLOP
 
     # Get tuned solutions
     tuned_solutions = tuner(x0, sigma0)
@@ -659,9 +700,8 @@ def tune(x0: list, sigma0: float) -> float:
         print(f'Elo of default KataGo parameters (simulation): {default_elo}')
         tuned_elo = simulate_elo(tuned_solutions)
         print(f'Elo of Tuned KataGo parameters (simulation): {tuned_elo}')
-        return tuned_elo
 
-    if not simulation:
+    if plotting:
         # Parameter names are the same for both dictionaries
         parameter_names = default_parameters.keys()
         default_values = [default_parameters[k] for k in parameter_names]
@@ -678,44 +718,53 @@ def tune(x0: list, sigma0: float) -> float:
         plt.title('Comparison of Default and Tuned KataGo Parameters')
         plt.show()
 
-        games = 100 # number of games to verify goodness of Tuned KataGo command
-        print(f'Verifying goodness of Tuned KataGo command with {games} games...')
-        half_games = int(games / 2) # half of the number of games
+    games = 100 # number of games to verify goodness of Tuned KataGo command
+    print(f'Verifying goodness of Tuned KataGo command with {games} games...')
+    half_games = int(games / 2) # half of the number of games
 
-        # Match default KataGo (as black) and Tuned KataGo (as white)
-        (default_win, draw, cma_win) = match_program_a_and_b(default_solutions, tuned_solutions, half_games)
+    # Match default KataGo (as black) and Tuned KataGo (as white)
+    (default_win, draw, cma_win) = match_program_a_and_b(default_solutions, tuned_solutions, half_games)
 
-        # Record the number of games that black wins
-        total_black_win = default_win
+    # Record the number of games that black wins
+    total_black_win = default_win
 
-        # Record the number of games that white wins
-        total_white_win = cma_win
+    # Record the number of games that white wins
+    total_white_win = cma_win
 
-        # Record the numbers of winning and draw games
-        (total_default_win, total_draw, total_cma_win) = (default_win, draw, cma_win)
+    # Record the numbers of winning and draw games
+    (total_default_win, total_draw, total_cma_win) = (default_win, draw, cma_win)
 
-        # Match Tuned KataGo (as black) and default KataGo (as white)
-        (cma_win, draw, default_win) = match_program_a_and_b(tuned_solutions, default_solutions, half_games)
+    # Match Tuned KataGo (as black) and default KataGo (as white)
+    (cma_win, draw, default_win) = match_program_a_and_b(tuned_solutions, default_solutions, half_games)
 
-        # Record the number of games that black wins
-        total_black_win += cma_win
+    # Record the number of games that black wins
+    total_black_win += cma_win
 
-        # Record the number of games that white wins
-        total_white_win += default_win
+    # Record the number of games that white wins
+    total_white_win += default_win
 
-        # Record the number of draw games
-        total_draw += draw
+    # Record the number of draw games
+    total_draw += draw
 
-        # Record the number of games that default KataGo wins
-        total_default_win += default_win
+    # Record the number of games that default KataGo wins
+    total_default_win += default_win
 
-        # Record the number of games that Tuned KataGo wins
-        total_cma_win += cma_win
+    # Record the number of games that Tuned KataGo wins
+    total_cma_win += cma_win
 
-        print(f'Games: {games}')
-        print(f'Black:draw:white = {total_black_win}:{total_draw}:{total_white_win}')
-        print(f'Default:Tuned = {total_default_win}:{total_cma_win}')
+    # Expected ELO
+    tuned_elo = elo(total_cma_win, games)
 
+    # ELO (+/- 2.0 standard deviation)
+    tuned_elo_range = elo_range(total_cma_win, games, 2.0)
+
+    print(f'Games: {games}')
+    print(f'Black:draw:white = {total_black_win}:{total_draw}:{total_white_win}')
+    print(f'Default:Tuned = {total_default_win}:{total_cma_win}')
+    print(f'Expected Tuned ELO = {tuned_elo}')
+    print(f'Tuned ELO range (+/- 2.0 standard deviation) = {tuned_elo_range}')
+
+    if plotting:
         # Binomial distribution under the null hypothesis
         n_values = np.arange(games + 1) # possible number of wins for A
         prob_values = binom.pmf(n_values, games, 0.5) # probabilities under the null hypothesis
@@ -792,7 +841,10 @@ def tune(x0: list, sigma0: float) -> float:
         print('Press enter to continue...')
         input()
 
-simulation = False # True: simulation; False: real games
+    return tuned_elo
+
+simulation = True # True: simulation; False: real games
+plotting = True # draw diagrams
 katago_exe = "/Users/chinchangyang/Links/katago-ccy" # Path to KataGo executable file
 gogui_classpath = "/Users/chinchangyang/Code/gogui/bin" # Class path of `GoGui`
 
@@ -800,7 +852,6 @@ gogui_classpath = "/Users/chinchangyang/Code/gogui/bin" # Class path of `GoGui`
 default_parameters = {
     "cpuctExploration": 1.0,
     "cpuctExplorationLog": 0.45,
-    "winLossUtilityFactor": 1.0,
     "staticScoreUtilityFactor": 0.1,
     "dynamicScoreUtilityFactor": 0.3,
 }
