@@ -552,6 +552,9 @@ def run_pairwiseclop(x0: list, sigma0: float) -> list:
     """
     global simulation
 
+    # Number of solutions
+    D = len(x0)
+
     # Translate solutions to parameters for CLOP
     parameters = [
         pairwiseclop.Parameter(
@@ -560,12 +563,12 @@ def run_pairwiseclop(x0: list, sigma0: float) -> list:
             likely_radius_around_guess=sigma0,
             hard_lower_bound=0.0,
             hard_upper_bound=1.0,
-        ) for i in range(len(x0))
+        ) for i in range(D)
     ]
 
     def parameters_to_solutions(parameters) -> list:
         # Translate parameters to solutions for CLOP
-        solutions = [parameters[str(i)] for i in range(len(x0))]
+        solutions = [parameters[str(i)] for i in range(D)]
 
         # Check boundaries
         for i in range(len(solutions)):
@@ -584,13 +587,13 @@ def run_pairwiseclop(x0: list, sigma0: float) -> list:
     result_of = simulate_program_a_play_with_b if simulation else program_a_play_with_b
 
     # Initialize the iteration list
-    iterations = 100
+    iterations = 500
 
     # Initialize the optimum list
     optimums = []
 
     for iteration in range(iterations):
-        for _ in range(10):
+        for _ in range(D):
             # Sample parameters A to evaluate
             a = clop.sample_params_to_evaluate()
 
@@ -676,9 +679,9 @@ def plot_elo_range(M: int, N: int):
         expected_elo = elo(M, N)
 
         ranges = {
-            '1.0 SD': elo_range(M, N, 1.0),
+            '3.0 SD': elo_range(M, N, 3.0),
             '2.0 SD': elo_range(M, N, 2.0),
-            '3.0 SD': elo_range(M, N, 3.0)
+            '1.0 SD': elo_range(M, N, 1.0),
         }
 
         # Plotting
@@ -732,6 +735,7 @@ def tune(x0: list, sigma0: float) -> float:
         print(f'Elo of default KataGo parameters (simulation): {default_elo}')
         tuned_elo = simulate_elo(tuned_solutions)
         print(f'Elo of Tuned KataGo parameters (simulation): {tuned_elo}')
+        print(f'Elo of optimal parameters (simulation): 0')
 
     if plotting:
         # Parameter names are the same for both dictionaries
@@ -751,7 +755,7 @@ def tune(x0: list, sigma0: float) -> float:
         plt.tight_layout()
         plt.show()
 
-    games = 100 # number of games to verify goodness of Tuned KataGo command
+    games = 200 # number of games to verify goodness of Tuned KataGo command
     print(f'Verifying goodness of Tuned KataGo command with {games} games...')
     half_games = int(games / 2) # half of the number of games
 
@@ -791,10 +795,11 @@ def tune(x0: list, sigma0: float) -> float:
     print(f'Games: {games}')
     print(f'Black:draw:white = {total_black_win}:{total_draw}:{total_white_win}')
     print(f'Default:Tuned = {total_default_win}:{total_cma_win}')
-    print(f'Expected Tuned ELO = {tuned_elo}')
-    print(f'Tuned ELO range (+/- 1.0 standard deviation) = {elo_range(total_cma_win, games, 1.0)}')
-    print(f'Tuned ELO range (+/- 2.0 standard deviation) = {elo_range(total_cma_win, games, 2.0)}')
-    print(f'Tuned ELO range (+/- 3.0 standard deviation) = {elo_range(total_cma_win, games, 3.0)}')
+    print(f'ELO of default parameters = 0')
+    print(f'Expected ELO of tuned parameters = {tuned_elo}')
+    print(f'ELO range (+/- 1.0 standard deviation) = {elo_range(total_cma_win, games, 1.0)}')
+    print(f'ELO range (+/- 2.0 standard deviation) = {elo_range(total_cma_win, games, 2.0)}')
+    print(f'ELO range (+/- 3.0 standard deviation) = {elo_range(total_cma_win, games, 3.0)}')
 
     # Plot ELO ranges
     plot_elo_range(total_cma_win, games)
