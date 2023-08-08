@@ -25,6 +25,9 @@ def translate_parameters(x: "list") -> "dict[str, float]":
         "cpuctExplorationLog": (x[0] * 1.80),
         "staticScoreUtilityFactor": (x[1] * 1.0),
         "dynamicScoreUtilityFactor": (x[2] * 1.0),
+        "cpuctUtilityStdevPrior": (x[3] * 1.60),
+        "cpuctUtilityStdevPriorWeight": (x[4] * 8.0),
+        "cpuctUtilityStdevScale": (x[5] * 1.0),
     }
 
     return parameters
@@ -43,6 +46,9 @@ def translate_solutions(y: "dict[str, float]") -> "list":
         y["cpuctExploration"] / 4.0,
         y["staticScoreUtilityFactor"] / 1.0,
         y["dynamicScoreUtilityFactor"] / 1.0,
+        y["cpuctUtilityStdevPrior"] / 1.60,
+        y["cpuctUtilityStdevPriorWeight"] / 8.0,
+        y["cpuctUtilityStdevScale"] / 1.0,
     ]
 
     return solutions
@@ -60,7 +66,7 @@ def get_katago_parameters(x: "list") -> "dict[str, float]":
     sub_parameters = translate_parameters(x)
 
     parameters = {
-        "maxVisits": 256,
+        "maxVisits": 512,
         "numSearchThreads": 2,
         "chosenMoveTemperatureEarly": 0.5,
         "chosenMoveTemperatureHalflife": 19,
@@ -79,9 +85,9 @@ def get_katago_parameters(x: "list") -> "dict[str, float]":
         "drawEquivalentWinsForWhite": 0.5,
         "cpuctExploration": sub_parameters["cpuctExploration"],
         "cpuctExplorationLog": sub_parameters["cpuctExplorationLog"],
-        "cpuctUtilityStdevPrior": 0.40,
-        "cpuctUtilityStdevPriorWeight": 2.0,
-        "cpuctUtilityStdevScale": 0.85,
+        "cpuctUtilityStdevPrior": sub_parameters["cpuctUtilityStdevPrior"],
+        "cpuctUtilityStdevPriorWeight": sub_parameters["cpuctUtilityStdevPriorWeight"],
+        "cpuctUtilityStdevScale": sub_parameters["cpuctUtilityStdevScale"],
         "fpuReductionMax": 0.2,
         "rootFpuReductionMax": 0.1,
         "uncertaintyExponent": 1.0,
@@ -314,7 +320,7 @@ def rastrigin(x: "list") -> float:
     return f
 
 
-def simulate_elo(a: "list") -> float:
+def simulate_elo(a: "list", test_function=rastrigin) -> float:
     """Simulates ELO rating for given parameters.
 
     This function computes the ELO rating by applying a penalty on each
@@ -323,6 +329,7 @@ def simulate_elo(a: "list") -> float:
 
     Args:
         a (list): The parameters for which ELO rating is to be computed.
+        test_function: Test function can be `sphere`, `elliptic`, `rotated_elliptic`, or `rastrigin`
 
     Returns:
         float: The computed ELO rating for the given parameters.
@@ -334,12 +341,6 @@ def simulate_elo(a: "list") -> float:
 
     # Scale the parameters to the domain space of the test function
     x = [100.0 * (ai - oi) for (ai, oi) in zipped]
-
-    # Define test function
-    # test_function = sphere
-    # test_function = elliptic
-    test_function = rotated_elliptic
-    # test_function = rastrigin
 
     # Get the function value
     f = test_function(x)
@@ -550,6 +551,8 @@ def plot_pairwiseclop(optimums, iterations):
             columns=[f'opt_{i}' for i in range(len(optimums[0]))]
         )
 
+        plt.figure()
+
         # Create a line plot for each optimum
         for col in data.columns:
             plt.plot(data.index, data[col], label=col)
@@ -560,6 +563,7 @@ def plot_pairwiseclop(optimums, iterations):
         plt.title('Evolution of Optimums')
         plt.legend()
         plt.grid(True)
+        plt.ion()
         plt.show()
 
 
@@ -609,14 +613,14 @@ def run_pairwiseclop(x0: list, sigma0: float) -> list:
     # A function that returns a result of a game that is played by programs A and B
     result_of = simulate_program_a_play_with_b if simulation else program_a_play_with_b
 
-    # Initialize the iteration list
-    iterations = 500
+    iterations = 300 # number of iterations
+    N = D # number of samples per iteration
 
     # Initialize the optimum list
     optimums = []
 
     for iteration in range(iterations):
-        for _ in range(D):
+        for _ in range(N):
             # Sample parameters A to evaluate
             a = clop.sample_params_to_evaluate()
 
@@ -730,6 +734,7 @@ def plot_elo_range(M: int, N: int):
         ax.legend()
         plt.tight_layout()
         plt.grid(True)
+        plt.ion()
         plt.show()
 
 
@@ -759,13 +764,6 @@ def tune(x0: list, sigma0: float) -> float:
     print_parameters(tuned_parameters)
     print('=== Tuned KataGo parameters (end) ===')
 
-    if simulation:
-        default_elo = simulate_elo(default_solutions)
-        print(f'Elo of default KataGo parameters (simulation): {default_elo}')
-        tuned_elo = simulate_elo(tuned_solutions)
-        print(f'Elo of Tuned KataGo parameters (simulation): {tuned_elo}')
-        print(f'Elo of optimal parameters (simulation): 0')
-
     if plotting:
         # Parameter names are the same for both dictionaries
         parameter_names = default_parameters.keys()
@@ -784,6 +782,7 @@ def tune(x0: list, sigma0: float) -> float:
         plt.legend()
         plt.title('Comparison of Default and Tuned KataGo Parameters')
         plt.tight_layout()
+        plt.ion()
         plt.show()
 
     games = 200  # number of games to verify goodness of Tuned KataGo command
@@ -825,18 +824,24 @@ def tune(x0: list, sigma0: float) -> float:
     # Expected ELO
     tuned_elo = elo(total_cma_win, games)
 
-    print(f'Games: {games}')
+    print(f'Verification Games: {games}')
     print(
         f'Black:draw:white = {total_black_win}:{total_draw}:{total_white_win}')
     print(f'Default:Tuned = {total_default_win}:{total_cma_win}')
     print(f'ELO of default parameters = 0')
-    print(f'Expected ELO of tuned parameters = {tuned_elo}')
+    print(f'Expected ELO of tuned parameters (from {games} games) = {tuned_elo}')
     print(
         f'ELO range (+/- 1.0 standard deviation) = {elo_range(total_cma_win, games, 1.0)}')
     print(
         f'ELO range (+/- 2.0 standard deviation) = {elo_range(total_cma_win, games, 2.0)}')
     print(
         f'ELO range (+/- 3.0 standard deviation) = {elo_range(total_cma_win, games, 3.0)}')
+
+    if simulation:
+        default_elo = simulate_elo(default_solutions)
+        tuned_elo = simulate_elo(tuned_solutions)
+        print(f'ELO of Tuned KataGo parameters (simulation): {tuned_elo - default_elo}')
+        print(f'ELO of optimal parameters (simulation): {-default_elo}')
 
     # Plot ELO ranges
     plot_elo_range(total_cma_win, games)
@@ -917,6 +922,7 @@ def tune(x0: list, sigma0: float) -> float:
         plt.title('Binomial distribution under the null hypothesis')
         plt.legend()
         plt.grid(True)
+        plt.ion()
         plt.show()
 
         # Pause to let users be able to view the diagrams
@@ -925,8 +931,29 @@ def tune(x0: list, sigma0: float) -> float:
 
     return tuned_elo
 
+def plot_contour():
+    global plotting, simulation
 
-simulation = True  # True: simulation; False: real games
+    if plotting and simulation:
+        # Create a grid of points within the specified range
+        x = np.linspace(0, 1, 400)  # 400 points for a finer resolution
+        y = np.linspace(0, 1, 400)
+        X, Y = np.meshgrid(x, y)
+        Z = [simulate_elo([Xi, Yi]) for (Xi, Yi) in zip(X, Y)]
+
+        # Make the contour plot
+        plt.figure(figsize=(10, 8))
+        contour = plt.contourf(X, Y, Z, levels=100, cmap='inferno')
+        plt.colorbar(contour)
+        plt.title("2D Test Function Contour Plot")
+        plt.xlabel("x")
+        plt.ylabel("y")
+        plt.grid(True)
+        plt.tight_layout()
+        plt.ion()
+        plt.show()
+
+simulation = True # True: simulation; False: real games
 plotting = True  # draw diagrams
 # Path to KataGo executable file
 katago_exe = "/Users/chinchangyang/Links/katago-ccy"
@@ -938,6 +965,9 @@ default_parameters = {
     "cpuctExplorationLog": 0.45,
     "staticScoreUtilityFactor": 0.1,
     "dynamicScoreUtilityFactor": 0.3,
+    "cpuctUtilityStdevPrior": 0.40,
+    "cpuctUtilityStdevPriorWeight": 2.0,
+    "cpuctUtilityStdevScale": 0.85,
 }
 
 # Default KataGo solutions
@@ -954,7 +984,9 @@ sigma0 = 0.2  # initial standard deviation in each coordinate
 # Define simulated optimum
 if simulation:
     def shift(x, s): return (x - s) if (x - s) > 0 else (x + s)
-    simulated_optimum = [shift(x0i, sigma0) for x0i in x0]
+    simulated_optimum = [shift(x0i, sigma0 / 2) for x0i in x0]
+    print(f'Simulated optimum: {simulated_optimum}')
+    plot_contour()
 
 tuned_num = 1  # number of tuned ELOs
 tuned_elos = []  # initialize tuned ELOs
