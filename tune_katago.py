@@ -348,13 +348,13 @@ def simulate_elo(a: "list", test_function=rastrigin) -> float:
     # Define the scaling factor for the function value.
     # A greater scaler makes the parameters more sensitive in the ELO rating.
     if test_function == sphere:
-        scaler = 1e-1
+        scaler = 2e-1
     elif test_function == elliptic:
         scaler = 1e-6
     elif test_function == rotated_elliptic:
-        scaler = 1e-7
+        scaler = 2e-6
     elif test_function == rastrigin:
-        scaler = 1e-1
+        scaler = 2e-1
     else:
         scaler = 1
 
