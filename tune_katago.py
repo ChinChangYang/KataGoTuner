@@ -588,8 +588,8 @@ def run_pairwiseclop(x0: list, sigma0: float) -> list:
             name=str(i),
             guess=x0[i],
             likely_radius_around_guess=sigma0,
-            hard_lower_bound=0.0,
-            hard_upper_bound=1.0,
+            hard_lower_bound=-0.1,
+            hard_upper_bound=1.1,
         ) for i in range(D)
     ]
 
@@ -599,8 +599,10 @@ def run_pairwiseclop(x0: list, sigma0: float) -> list:
 
         # Check boundaries
         for i in range(len(solutions)):
-            assert solutions[i] >= 0.0
-            assert solutions[i] <= 1.0
+            if solutions[i] < 0.0:
+                solutions[i] = 0.0
+            if solutions[i] > 1.0:
+                solutions[i] = 1.0
 
         return solutions
 
@@ -738,14 +740,10 @@ def plot_elo_range(M: int, N: int):
         plt.show()
 
 
-def tune(x0: list, sigma0: float) -> float:
+def tune(x0: list, sigma0: float, tuner=run_pairwiseclop) -> float:
     global match, default_parameters, plotting
 
     match = 0  # initialize a counter of match games
-
-    # Define the tuner
-    # tuner = run_cma_fmin # stochastic optimizer CMA-ES
-    tuner = run_pairwiseclop  # pairwise CLOP
 
     # Get tuned solutions
     tuned_solutions = tuner(x0, sigma0)
@@ -980,6 +978,8 @@ assert(default_solutions == translate_solutions(
 match = 0  # initialize a counter of match games
 x0 = default_solutions  # initial guess of minimum solution
 sigma0 = 0.2  # initial standard deviation in each coordinate
+# tuner = run_cma_fmin # stochastic optimizer CMA-ES
+tuner = run_pairwiseclop  # pairwise CLOP
 
 # Define simulated optimum
 if simulation:
@@ -993,7 +993,7 @@ tuned_elos = []  # initialize tuned ELOs
 
 for _ in range(tuned_num):
     # Append tuned ELO
-    tuned_elos.append(tune(x0, sigma0))
+    tuned_elos.append(tune(x0, sigma0, tuner))
 
 print('=== Tuned ELOs (start) ===')
 

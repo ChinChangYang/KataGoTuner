@@ -476,10 +476,6 @@ class PairwiseCLOP:
                 current_logweight = new_logweight
                 continue
 
-        ret = self._unconvert_obs_already_unnormalized(point_unnormalized)
-        if ret['2'] > 1.0:
-            ret['2'] = 1.0
-
         return self._unconvert_obs_already_unnormalized(point_unnormalized)
 
 
