@@ -22,12 +22,12 @@ def translate_parameters(x: "list") -> "dict[str, float]":
     """
     parameters = {
         "cpuctExploration": (x[0] * 4.0),
-        "cpuctExplorationLog": (x[0] * 1.80),
-        "staticScoreUtilityFactor": (x[1] * 1.0),
-        "dynamicScoreUtilityFactor": (x[2] * 1.0),
-        "cpuctUtilityStdevPrior": (x[3] * 1.60),
-        "cpuctUtilityStdevPriorWeight": (x[4] * 8.0),
-        "cpuctUtilityStdevScale": (x[5] * 1.0),
+        "cpuctExplorationLog": (x[1] * 1.80),
+        "staticScoreUtilityFactor": (x[2] * 1.0),
+        "dynamicScoreUtilityFactor": (x[3] * 1.0),
+        "cpuctUtilityStdevPrior": (x[4] * 1.60),
+        "cpuctUtilityStdevPriorWeight": (x[5] * 8.0),
+        "cpuctUtilityStdevScale": (x[6] * 1.0),
     }
 
     return parameters
@@ -44,6 +44,7 @@ def translate_solutions(y: "dict[str, float]") -> "list":
     """
     solutions = [
         y["cpuctExploration"] / 4.0,
+        y["cpuctExplorationLog"] / 1.80,
         y["staticScoreUtilityFactor"] / 1.0,
         y["dynamicScoreUtilityFactor"] / 1.0,
         y["cpuctUtilityStdevPrior"] / 1.60,
@@ -348,11 +349,11 @@ def simulate_elo(a: "list", test_function=rastrigin) -> float:
     # Define the scaling factor for the function value.
     # A greater scaler makes the parameters more sensitive in the ELO rating.
     if test_function == sphere:
-        scaler = 2e-1
+        scaler = 2e-2
     elif test_function == elliptic:
         scaler = 1e-6
     elif test_function == rotated_elliptic:
-        scaler = 2e-6
+        scaler = 5e-6
     elif test_function == rastrigin:
         scaler = 2e-1
     else:
@@ -518,24 +519,27 @@ def run_cma_fmin(x0: list, sigma0: float) -> list:
     Returns:
         list: tuned solutions
     """
+    global plotting
+
     # Modify CMA options
     options = cma.CMAOptions()  # initialize CMA options
     options.set('bounds', [0, 1])  # lower and upper boundaries of parameters
     options.set('popsize', 10 * len(x0))  # population size
     options.set('tolx', 1e-2)  # tolerance in solution changes
     options.set('maxfevals', 2e4)  # maximum number of function evaluations
-    # tolerance in condition of the covariance matrix
+    # Tolerance in condition of the covariance matrix
     options.set('tolconditioncov', 1e12)
 
     # Run the stochastic optimizer CMA-ES
     result = cma.fmin(None, x0, sigma0, options=options,
                       parallel_objective=ranking)
 
-    # Plot CMA-ES data from files
-    cma.plot()
+    if plotting:
+        # Plot CMA-ES data from files
+        cma.plot()
 
-    # Display the figures
-    plt.show()
+        # Display the figures
+        plt.show()
 
     return result[5]
 
@@ -579,6 +583,8 @@ def run_pairwiseclop(x0: list, sigma0: float) -> list:
     """
     global simulation
 
+    print(f'Initial guess of minimum solution: {x0}')
+
     # Number of solutions
     D = len(x0)
 
@@ -588,8 +594,8 @@ def run_pairwiseclop(x0: list, sigma0: float) -> list:
             name=str(i),
             guess=x0[i],
             likely_radius_around_guess=sigma0,
-            hard_lower_bound=-0.1,
-            hard_upper_bound=1.1,
+            hard_lower_bound=-0.2,
+            hard_upper_bound=1.2,
         ) for i in range(D)
     ]
 
@@ -615,8 +621,8 @@ def run_pairwiseclop(x0: list, sigma0: float) -> list:
     # A function that returns a result of a game that is played by programs A and B
     result_of = simulate_program_a_play_with_b if simulation else program_a_play_with_b
 
-    iterations = 300 # number of iterations
-    N = D # number of samples per iteration
+    iterations = 100  # number of iterations
+    N = 50  # number of samples per iteration
 
     # Initialize the optimum list
     optimums = []
@@ -783,7 +789,7 @@ def tune(x0: list, sigma0: float, tuner=run_pairwiseclop) -> float:
         plt.ion()
         plt.show()
 
-    games = 200  # number of games to verify goodness of Tuned KataGo command
+    games = 1000  # number of games to verify goodness of Tuned KataGo command
     print(f'Verifying goodness of Tuned KataGo command with {games} games...')
     half_games = int(games / 2)  # half of the number of games
 
@@ -827,7 +833,8 @@ def tune(x0: list, sigma0: float, tuner=run_pairwiseclop) -> float:
         f'Black:draw:white = {total_black_win}:{total_draw}:{total_white_win}')
     print(f'Default:Tuned = {total_default_win}:{total_cma_win}')
     print(f'ELO of default parameters = 0')
-    print(f'Expected ELO of tuned parameters (from {games} games) = {tuned_elo}')
+    print(
+        f'Expected ELO of tuned parameters (from {games} games) = {tuned_elo}')
     print(
         f'ELO range (+/- 1.0 standard deviation) = {elo_range(total_cma_win, games, 1.0)}')
     print(
@@ -838,7 +845,8 @@ def tune(x0: list, sigma0: float, tuner=run_pairwiseclop) -> float:
     if simulation:
         default_elo = simulate_elo(default_solutions)
         tuned_elo = simulate_elo(tuned_solutions)
-        print(f'ELO of Tuned KataGo parameters (simulation): {tuned_elo - default_elo}')
+        print(
+            f'ELO of Tuned KataGo parameters (simulation): {tuned_elo - default_elo}')
         print(f'ELO of optimal parameters (simulation): {-default_elo}')
 
     # Plot ELO ranges
@@ -929,6 +937,7 @@ def tune(x0: list, sigma0: float, tuner=run_pairwiseclop) -> float:
 
     return tuned_elo
 
+
 def plot_contour():
     global plotting, simulation
 
@@ -951,7 +960,8 @@ def plot_contour():
         plt.ion()
         plt.show()
 
-simulation = True # True: simulation; False: real games
+
+simulation = False  # True: simulation; False: real games
 plotting = True  # draw diagrams
 # Path to KataGo executable file
 katago_exe = "/Users/chinchangyang/Links/katago-ccy"
@@ -969,7 +979,12 @@ default_parameters = {
 }
 
 # Default KataGo solutions
-default_solutions = translate_solutions(default_parameters)
+if simulation:
+    default_solutions = translate_solutions(default_parameters)
+    dimension = len(default_solutions)
+    default_solutions = [0.5 for _ in range(dimension)]
+else:
+    default_solutions = translate_solutions(default_parameters)
 
 # Sanity check
 assert(default_solutions == translate_solutions(
@@ -977,14 +992,15 @@ assert(default_solutions == translate_solutions(
 
 match = 0  # initialize a counter of match games
 x0 = default_solutions  # initial guess of minimum solution
-sigma0 = 0.2  # initial standard deviation in each coordinate
+sigma0 = 0.25  # initial standard deviation in each coordinate
 # tuner = run_cma_fmin # stochastic optimizer CMA-ES
 tuner = run_pairwiseclop  # pairwise CLOP
 
 # Define simulated optimum
 if simulation:
-    def shift(x, s): return (x - s) if (x - s) > 0 else (x + s)
-    simulated_optimum = [shift(x0i, sigma0 / 2) for x0i in x0]
+    dimension = len(x0)
+    simulated_optimum = [(0.25 + (0.5 * (index / (dimension - 1))))
+                         for index in range(dimension)]
     print(f'Simulated optimum: {simulated_optimum}')
     plot_contour()
 
