@@ -540,6 +540,7 @@ def run_cma_fmin(x0: list, sigma0: float) -> list:
 
         # Display the figures
         plt.show()
+        plt.savefig('cma.png')
 
     return result[5]
 
@@ -569,6 +570,7 @@ def plot_pairwiseclop(optimums, iterations):
         plt.grid(True)
         plt.ion()
         plt.show()
+        plt.savefig('clop.png')
 
 
 def run_pairwiseclop(x0: list, sigma0: float) -> list:
@@ -744,6 +746,7 @@ def plot_elo_range(M: int, N: int):
         plt.grid(True)
         plt.ion()
         plt.show()
+        plt.savefig('elo.png')
 
 
 def tune(x0: list, sigma0: float, tuner=run_pairwiseclop) -> float:
@@ -788,6 +791,7 @@ def tune(x0: list, sigma0: float, tuner=run_pairwiseclop) -> float:
         plt.tight_layout()
         plt.ion()
         plt.show()
+        plt.savefig('parameters.png')
 
     games = 1000  # number of games to verify goodness of Tuned KataGo command
     print(f'Verifying goodness of Tuned KataGo command with {games} games...')
@@ -930,6 +934,7 @@ def tune(x0: list, sigma0: float, tuner=run_pairwiseclop) -> float:
         plt.grid(True)
         plt.ion()
         plt.show()
+        plt.savefig('h0.png')
 
         # Pause to let users be able to view the diagrams
         print('Press enter to continue...')
@@ -959,6 +964,7 @@ def plot_contour():
         plt.tight_layout()
         plt.ion()
         plt.show()
+        plt.savefig('contour.png')
 
 
 simulation = False  # True: simulation; False: real games
