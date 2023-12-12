@@ -22,11 +22,11 @@ def get_command(x) -> str:
     command = f'{x["exe"]} gtp -config {x["config"]} -model {x["model"]} -override-config maxVisits={x["maxVisits"]}'
     return command
 
-def match(black_parameters, white_parameters, gogui_classpath, game_count) -> int:
+def match(black_parameters, white_parameters, gogui_classpath, game_count, sgffile_prefix="match", verbose=True) -> int:
     black_command = get_command(black_parameters)
     white_command = get_command(white_parameters)
     board_size = 19
-    komi = 7
+    komi = 7.5
     twogtp = ['java',
               '-cp',
               gogui_classpath,
@@ -41,10 +41,10 @@ def match(black_parameters, white_parameters, gogui_classpath, game_count) -> in
               f'{komi}',
               '-auto',
               '-sgffile',
-              f'match-{game_count}']
+              f'{sgffile_prefix}-{game_count}']
 
     spawn_process(twogtp)
-    sgffile = f'match-{game_count}-0.sgf'
+    sgffile = f'{sgffile_prefix}-{game_count}-0.sgf'
     is_won = 0
 
     with open(sgffile, "rb") as f:
@@ -55,19 +55,22 @@ def match(black_parameters, white_parameters, gogui_classpath, game_count) -> in
         if (winner == 'b'):
             # Black won
             is_won = -1
-            print(f'Game {game_count}: Black won')
+            if verbose:
+                print(f'Game {game_count}: Black won')
         elif (winner == 'w'):
             # White won
             is_won = 1
-            print(f'Game {game_count}: White won')
+            if verbose:
+                print(f'Game {game_count}: White won')
         else:
             # Draw
             is_won = 0
-            print(f'Game {game_count}: Draw')
+            if verbose:
+                print(f'Game {game_count}: Draw')
 
     return is_won
 
-def match_games(black_parameters, white_parameters, game_count_start, games) -> (int, int, int):
+def match_games(black_parameters, white_parameters, game_count_start, games, sgffile_prefix="match", verbose=True) -> (int, int, int):
     results = []
     game_count_stop = game_count_start + games
 
@@ -76,8 +79,10 @@ def match_games(black_parameters, white_parameters, game_count_start, games) -> 
             black_parameters,
             white_parameters,
             "/Users/chinchangyang/Code/gogui/bin",
-            game_count)
-        
+            game_count,
+            sgffile_prefix=sgffile_prefix,
+            verbose=verbose)
+
         results.append(result)
 
     black_wins = [1 if result == -1 else 0 for result in results]
@@ -131,24 +136,25 @@ def elo_range(M: int, N: int, a: float) -> float:
 
 if __name__ == "__main__":
     t0 = time.time()
-    bot_a_name = 'OpenCL'
-    bot_b_name = 'Metal'
+    bot_a_name = 'b18c384nbt'
 
     bot_a_parameters = {
         "exe": "/Users/chinchangyang/Code/KataGo/cpp/build/katago",
         "config": "/Users/chinchangyang/.katago/default_gtp.cfg",
         "model": "/Users/chinchangyang/Code/KataGo-Models/kata1-b18c384nbt-s7709731328-d3715293823.bin.gz",
-        "maxVisits": "1024"
+        "maxVisits": "2"
     }
+
+    bot_b_name = 'b28c512nbt'
 
     bot_b_parameters = {
         "exe": "/Users/chinchangyang/Code/KataGo-CCY/cpp/build/katago",
-        "config": "/Users/chinchangyang/.katago/default_gtp.cfg",
-        "model": "/Users/chinchangyang/Code/KataGo-Models/kata1-b18c384nbt-s7709731328-d3715293823.bin.gz",
-        "maxVisits": "1024"
+        "config": "/Users/chinchangyang/Code/KataGo-CCY/cpp/configs/misc/coreml_example.cfg",
+        "model": "/Users/chinchangyang/Code/KataGo-Models/b28c512nbt-s1436726784-d3907069532.bin.gz",
+        "maxVisits": "2"
     }
 
-    total_games = 128
+    total_games = 1024
     half_games = int(total_games / 2)
 
     black_win, white_win, draw = match_games(
