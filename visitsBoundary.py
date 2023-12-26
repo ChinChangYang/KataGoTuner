@@ -1,4 +1,5 @@
 import datetime
+import math
 import time
 import numpy as np
 from sklearn.linear_model import LogisticRegression
@@ -7,26 +8,27 @@ from match import match_games
 
 # Define the match function
 def match_function(x, y):
+    bot_a_name = 'b18c384nbt-s8341979392'
+    bot_b_name = 'b40c256-s12775405312'
     bot_b_wins = []
     for (xi, yi) in zip(x, y):
         xi_int = int(xi)
         yi_int = int(yi)
-        bot_a_name = 'b18c384nbt-s7709731328'
 
         bot_a_parameters = {
             "exe": "/Users/chinchangyang/Code/KataGo/cpp/build/katago",
             "config": "/Users/chinchangyang/.katago/default_gtp.cfg",
-            "model": "/Users/chinchangyang/Code/KataGo-Models/kata1-b18c384nbt-s7709731328-d3715293823.bin.gz",
-            "maxVisits": f'{xi_int}'
+            "model": "/Users/chinchangyang/Code/KataGo-Models/kata1-b18c384nbt-s8341979392-d3881113763.bin.gz",
+            "maxVisits": f'{xi_int}',
+            "numSearchThreads": 2
         }
 
-        bot_b_name = 'b28c512nbt-s1436726784'
-
         bot_b_parameters = {
-            "exe": "/Users/chinchangyang/Code/KataGo-CCY/cpp/build/katago",
-            "config": "/Users/chinchangyang/Code/KataGo-CCY/cpp/configs/misc/coreml_example.cfg",
-            "model": "/Users/chinchangyang/Code/KataGo-Models/b28c512nbt-s1436726784-d3907069532.bin.gz",
-            "maxVisits": f'{yi_int}'
+            "exe": "/Users/chinchangyang/Code/KataGo/cpp/build/katago",
+            "config": "/Users/chinchangyang/.katago/default_gtp.cfg",
+            "model": "/Users/chinchangyang/Code/KataGo-Models/kata1-b40c256-s12775405312-d3173710477.bin.gz",
+            "maxVisits": f'{yi_int}',
+            "numSearchThreads": 2
         }
 
         id = np.random.randint(10000)
@@ -64,29 +66,43 @@ def match_function(x, y):
 
 # Define the simulation function
 def simulation_function(x, y):
-    x_hat = [xi + 10.0 * np.random.randn() for xi in x]
-    y_hat = [yi + 10.0 * np.random.randn() for yi in y]
+    x_hat = [xi + 20.0 * np.random.randn() for xi in x]
+    y_hat = [yi + 20.0 * np.random.randn() for yi in y]
     z_hat = [(yi > 0.5 * xi).astype(int) for (xi, yi) in zip(x_hat, y_hat)]
     return z_hat
 
 # Generate initial samples
 def generate_initial_samples(black_box_function, N_init, x_min, x_max, y_min, y_max):
-    x_init = np.random.uniform(x_min, x_max, N_init)
-    y_init = np.random.uniform(y_min, y_max, N_init)
+    log_x_min = math.log(x_min)
+    log_x_max = math.log(x_max)
+    log_x_init = np.random.uniform(log_x_min, log_x_max, N_init)
+    x_init = np.exp(log_x_init)
+    log_y_min = math.log(y_min)
+    log_y_max = math.log(y_max)
+    log_y_init = np.random.uniform(log_y_min, log_y_max, N_init)
+    y_init = np.exp(log_y_init)
     X_init = np.column_stack((x_init, y_init))
     y_label_init = black_box_function(x_init, y_init)
     return X_init, y_label_init
 
 # Generate candidate points
 def generate_candidates(N_cand, x_min, x_max, y_min, y_max):
-    x_cand = np.random.uniform(x_min, x_max, N_cand)
-    y_cand = np.random.uniform(y_min, y_max, N_cand)
+    log_x_min = math.log(x_min)
+    log_x_max = math.log(x_max)
+    log_x_cand = np.random.uniform(log_x_min, log_x_max, N_cand)
+    x_cand = np.exp(log_x_cand)
+    log_y_min = math.log(y_min)
+    log_y_max = math.log(y_max)
+    log_y_cand = np.random.uniform(log_y_min, log_y_max, N_cand)
+    y_cand = np.exp(log_y_cand)
     return np.column_stack((x_cand, y_cand))
 
 # Expected Improvement calculation
-def compute_expected_improvement(X, model):
-    probas = model.predict_proba(X)
+def compute_expected_improvement(X, model, temperature=0.0):
+    probas = model.predict_proba(np.log(X))
     uncertainty = np.min(probas, axis=1)
+    uncertainty = uncertainty + temperature * np.random.rand(np.shape(uncertainty)[0])
+
     return uncertainty
 
 # Select top K points based on EI
@@ -104,33 +120,39 @@ def fit_decision_boundary(black_box_function, x_min, x_max, y_min, y_max, N):
 
     # Initial sampling
     X_init, y_label_init = generate_initial_samples(black_box_function, N_init, x_min, x_max, y_min, y_max)
-    model.fit(X_init, y_label_init)
+    model.fit(np.log(X_init), y_label_init)
 
     # Active Learning Loop
     for iteration in range(N_iter):
-        N_cand = int(K + 0.05 * (iteration + 1))
+        N_cand = 50
         X_cand = generate_candidates(N_cand, x_min, x_max, y_min, y_max)
-        ei = compute_expected_improvement(X_cand, model)
+        temperature = 1.5 * (N_iter - iteration) / N_iter
+        ei = compute_expected_improvement(X_cand, model, temperature=temperature)
         X_select = select_top_k(X_cand, ei, K)
+        print(f"Iteration: {iteration + 1}/{N_iter} N_cand={N_cand}")
         y_label_select = black_box_function(X_select[:, 0], X_select[:, 1])
-        model.fit(np.vstack([X_init, X_select]), np.hstack([y_label_init, y_label_select]))
         X_init = np.vstack([X_init, X_select])
         y_label_init = np.hstack([y_label_init, y_label_select])
+        model.fit(np.log(X_init), y_label_init)
 
     return X_init, y_label_init, model
 
 # Plot decision boundary
 def plot_decision_boundary(model, x_min, x_max, y_min, y_max):
-    # Visualizing the decision boundary
-    x_grid, y_grid = np.meshgrid(np.linspace(x_min, x_max, 50), np.linspace(y_min, y_max, 50))
-    X_grid = np.column_stack([x_grid.ravel(), y_grid.ravel()])
-    y_pred_grid = model.predict(X_grid).reshape(x_grid.shape)
-    bot_a_name = 'b18c384nbt-s7709731328'
-    bot_b_name = 'b28c512nbt-s1436726784'
+    # Visualizing the decision boundary on log-log scales
+    x_log_space = np.logspace(np.log10(x_min), np.log10(x_max), 50)
+    y_log_space = np.logspace(np.log10(y_min), np.log10(y_max), 50)
+    x_grid, y_grid = np.meshgrid(x_log_space, y_log_space)
+    X_grid_log = np.column_stack([x_grid.ravel(), y_grid.ravel()])
+    y_pred_grid_log = model.predict(np.log(X_grid_log)).reshape(x_grid.shape)
+    bot_a_name = 'b18c384nbt-s8341979392'
+    bot_b_name = 'b40c256-s12775405312'
 
     plt.figure(figsize=(10, 6))
-    plt.contourf(x_grid, y_grid, y_pred_grid, alpha=0.5, levels=[0,0.5,1], cmap='coolwarm')
-    plt.scatter(X_init[:, 0], X_init[:, 1], c=y_label_init, cmap='coolwarm', edgecolor='k', label=f'Warm color: {bot_b_name} Won. Cool color: {bot_b_name} Lost)')
+    plt.contourf(x_grid, y_grid, y_pred_grid_log, alpha=0.5, levels=[0,0.5,1], cmap='coolwarm')
+    plt.scatter(X_init[:, 0], X_init[:, 1], c=y_label_init, cmap='coolwarm', edgecolor='k', label=f'Cool color: {bot_a_name} Won. Warm color: {bot_b_name} Won.')
+    plt.xscale('log', base=2)
+    plt.yscale('log', base=2)
     plt.title('Decision Boundary of Max Visits per Move')
     plt.xlabel(f'Max visits per move for {bot_a_name}')
     plt.ylabel(f'Max visits per move for {bot_b_name}')
@@ -140,11 +162,11 @@ def plot_decision_boundary(model, x_min, x_max, y_min, y_max):
 
 if __name__ == "__main__":
     t0 = time.time()
-    x_min, x_max = 1, 32
-    y_min, y_max = 1, 32
-    N = 32
-    test_function = match_function
+    x_min, x_max = 2, 512
+    y_min, y_max = 2, 512
+    N = 512
+    test_function = simulation_function # match_function
     X_init, y_label_init, model = fit_decision_boundary(test_function, x_min, x_max, y_min, y_max, N)
-    plot_decision_boundary(model, x_min, x_max, y_min, y_max)
     elapsed = time.time() - t0
     print(f'Elapsed: {str(datetime.timedelta(seconds=round(elapsed)))}')
+    plot_decision_boundary(model, x_min, x_max, y_min, y_max)
