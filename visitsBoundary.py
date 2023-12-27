@@ -9,7 +9,7 @@ from match import match_games
 # Define the match function
 def match_function(x, y):
     bot_a_name = 'b18c384nbt-s8341979392'
-    bot_b_name = 'b40c256-s12775405312'
+    bot_b_name = 'b20c256x2-s5303129600'
     bot_b_wins = []
     for (xi, yi) in zip(x, y):
         xi_int = int(xi)
@@ -26,7 +26,7 @@ def match_function(x, y):
         bot_b_parameters = {
             "exe": "/Users/chinchangyang/Code/KataGo/cpp/build/katago",
             "config": "/Users/chinchangyang/.katago/default_gtp.cfg",
-            "model": "/Users/chinchangyang/Code/KataGo-Models/kata1-b40c256-s12775405312-d3173710477.bin.gz",
+            "model": "/Users/chinchangyang/Code/KataGo-Models/kata1-b20c256x2-s5303129600-d1228401921.bin.gz",
             "maxVisits": f'{yi_int}',
             "numSearchThreads": 2
         }
@@ -73,13 +73,18 @@ def simulation_function(x, y):
 
 # Generate initial samples
 def generate_initial_samples(black_box_function, N_init, x_min, x_max, y_min, y_max):
+    N_init = max(1, N_init - 2)
     log_x_min = math.log(x_min)
     log_x_max = math.log(x_max)
     log_x_init = np.random.uniform(log_x_min, log_x_max, N_init)
+    log_x_init = np.append(log_x_init, log_x_min)
+    log_x_init = np.append(log_x_init, log_x_max)
     x_init = np.exp(log_x_init)
     log_y_min = math.log(y_min)
     log_y_max = math.log(y_max)
     log_y_init = np.random.uniform(log_y_min, log_y_max, N_init)
+    log_y_init = np.append(log_y_init, log_y_max)
+    log_y_init = np.append(log_y_init, log_y_min)
     y_init = np.exp(log_y_init)
     X_init = np.column_stack((x_init, y_init))
     y_label_init = black_box_function(x_init, y_init)
@@ -146,7 +151,7 @@ def plot_decision_boundary(model, x_min, x_max, y_min, y_max):
     X_grid_log = np.column_stack([x_grid.ravel(), y_grid.ravel()])
     y_pred_grid_log = model.predict(np.log(X_grid_log)).reshape(x_grid.shape)
     bot_a_name = 'b18c384nbt-s8341979392'
-    bot_b_name = 'b40c256-s12775405312'
+    bot_b_name = 'b20c256x2-s5303129600'
 
     plt.figure(figsize=(10, 6))
     plt.contourf(x_grid, y_grid, y_pred_grid_log, alpha=0.5, levels=[0,0.5,1], cmap='coolwarm')
@@ -158,14 +163,16 @@ def plot_decision_boundary(model, x_min, x_max, y_min, y_max):
     plt.ylabel(f'Max visits per move for {bot_b_name}')
     plt.legend()
     plt.show()
+    plt.savefig('boundary.png')
 
 
 if __name__ == "__main__":
     t0 = time.time()
-    x_min, x_max = 2, 512
-    y_min, y_max = 2, 512
+    x_min, x_max = 2, 1024
+    y_min, y_max = 2, 1024
     N = 512
-    test_function = simulation_function # match_function
+    # test_function = simulation_function
+    test_function = match_function
     X_init, y_label_init, model = fit_decision_boundary(test_function, x_min, x_max, y_min, y_max, N)
     elapsed = time.time() - t0
     print(f'Elapsed: {str(datetime.timedelta(seconds=round(elapsed)))}')
