@@ -29,6 +29,7 @@ def get_command(x) -> str:
         "suppressVirtualLossLeakCatchUp",
         "numSearchThreads",
         "useNoisePruning",
+        "maxTime",
     ]
 
     for option in override_options:
