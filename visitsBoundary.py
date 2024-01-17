@@ -1,5 +1,6 @@
 import datetime
 import math
+from multiprocessing import Pool
 import time
 import numpy as np
 from sklearn.linear_model import LogisticRegression
@@ -8,74 +9,77 @@ from match import match_games
 
 
 def get_bot_names():
-    bot_a_name = "b18c384nbt-s8341979392-t1"
-    bot_b_name = "b18c384nbt-s8341979392-t32"
+    bot_a_name = "b28c512nbt-s2830075392-t1"
+    bot_b_name = "b28c512nbt-s2652711936-t1"
     return bot_a_name, bot_b_name
+
+
+def match_a_game(xi, yi):
+    bot_a_name, bot_b_name = get_bot_names()
+    xi_int = int(xi)
+    yi_int = int(yi)
+
+    bot_a_parameters = {
+        "exe": "/Users/chinchangyang/Code/KataGo/cpp/build/katago",
+        "config": "/Users/chinchangyang/.katago/default_gtp.cfg",
+        "model": "/Users/chinchangyang/Code/KataGo-Models/b28c512nbt-s2830075392-d3981649212.bin.gz",
+        "maxVisits": f"{xi_int}",
+        "numSearchThreads": 1,
+        "maxTime": 1e20,
+    }
+
+    bot_b_parameters = {
+        "exe": "/Users/chinchangyang/Code/KataGo/cpp/build/katago",
+        "config": "/Users/chinchangyang/.katago/default_gtp.cfg",
+        "model": "/Users/chinchangyang/Code/KataGo-Models/b28c512nbt-s2652711936-d3972499590.bin.gz",
+        "maxVisits": f"{yi_int}",
+        "numSearchThreads": 1,
+        "maxTime": 1e20,
+    }
+
+    id = np.random.randint(10000)
+    sgffile_prefix = f"maxVisits-{xi_int}-{yi_int}-{id}"
+
+    if np.random.randn() < 0.5:
+        black_win, white_win, _ = match_games(
+            bot_a_parameters,
+            bot_b_parameters,
+            game_count_start=0,
+            games=1,
+            sgffile_prefix=sgffile_prefix,
+            verbose=False,
+        )
+
+        bot_b_win = white_win
+    else:
+        black_win, white_win, _ = match_games(
+            bot_b_parameters,
+            bot_a_parameters,
+            game_count_start=0,
+            games=1,
+            sgffile_prefix=sgffile_prefix,
+            verbose=False,
+        )
+
+        bot_b_win = black_win
+
+    if bot_b_win > 0:
+        print(
+            f"{bot_a_name} MaxVisits={xi_int} vs {bot_b_name} MaxVisits={yi_int}: {bot_b_name} won, ID:{id}"
+        )
+    else:
+        print(
+            f"{bot_a_name} MaxVisits={xi_int} vs {bot_b_name} MaxVisits={yi_int}: {bot_a_name} won, ID:{id}"
+        )
+
+    return bot_b_win
 
 
 # Define the match function
 def match_function(x, y):
-    bot_a_name, bot_b_name = get_bot_names()
     bot_b_wins = []
-    for xi, yi in zip(x, y):
-        xi_int = int(xi)
-        yi_int = int(yi)
-
-        bot_a_parameters = {
-            "exe": "/Users/chinchangyang/Code/KataGo/cpp/build/katago",
-            "config": "/Users/chinchangyang/.katago/default_gtp.cfg",
-            "model": "/Users/chinchangyang/Code/KataGo-Models/kata1-b18c384nbt-s8341979392-d3881113763.bin.gz",
-            "maxVisits": f"{xi_int}",
-            "numSearchThreads": 1,
-            "maxTime": 1e20,
-        }
-
-        bot_b_parameters = {
-            "exe": "/Users/chinchangyang/Code/KataGo/cpp/build/katago",
-            "config": "/Users/chinchangyang/.katago/default_gtp.cfg",
-            "model": "/Users/chinchangyang/Code/KataGo-Models/kata1-b18c384nbt-s8341979392-d3881113763.bin.gz",
-            "maxVisits": f"{yi_int}",
-            "numSearchThreads": 32,
-            "maxTime": 1e20,
-        }
-
-        id = np.random.randint(10000)
-        sgffile_prefix = f"maxVisits-{xi_int}-{yi_int}-{id}"
-
-        if np.random.randn() < 0.5:
-            black_win, white_win, _ = match_games(
-                bot_a_parameters,
-                bot_b_parameters,
-                game_count_start=0,
-                games=1,
-                sgffile_prefix=sgffile_prefix,
-                verbose=False,
-            )
-
-            bot_b_win = white_win
-        else:
-            black_win, white_win, _ = match_games(
-                bot_b_parameters,
-                bot_a_parameters,
-                game_count_start=0,
-                games=1,
-                sgffile_prefix=sgffile_prefix,
-                verbose=False,
-            )
-
-            bot_b_win = black_win
-
-        bot_b_wins.append(bot_b_win)
-
-        if bot_b_win > 0:
-            print(
-                f"{bot_a_name} MaxVisits={xi_int} vs {bot_b_name} MaxVisits={yi_int}: {bot_b_name} won, ID:{id}"
-            )
-        else:
-            print(
-                f"{bot_a_name} MaxVisits={xi_int} vs {bot_b_name} MaxVisits={yi_int}: {bot_a_name} won, ID:{id}"
-            )
-
+    with Pool(8) as p:
+        bot_b_wins = p.starmap(match_a_game, zip(x, y))
     return bot_b_wins
 
 
@@ -83,7 +87,7 @@ def match_function(x, y):
 def simulation_function(x, y):
     x_hat = [xi + 20.0 * np.random.randn() for xi in x]
     y_hat = [yi + 20.0 * np.random.randn() for yi in y]
-    z_hat = [(yi > 0.5 * xi).astype(int) for (xi, yi) in zip(x_hat, y_hat)]
+    z_hat = [(yi > 0.1 * xi).astype(int) for (xi, yi) in zip(x_hat, y_hat)]
     return z_hat
 
 
@@ -137,7 +141,7 @@ def select_top_k(X, ei, K):
 # Fit decision boundary
 def fit_decision_boundary(black_box_function, x_min, x_max, y_min, y_max, N):
     N_init = max(min(30, N), int(0.05 * N))
-    K = 2
+    K = 4
     N_iter = int((N - N_init) / K)
 
     # Initialize Logistic Regression
@@ -165,20 +169,50 @@ def fit_decision_boundary(black_box_function, x_min, x_max, y_min, y_max, N):
     return X_init, y_label_init, model
 
 
+def logistic_regression_output(x1, x2, coef, bias):
+    z = bias + coef[0, 0] * x1 + coef[0, 1] * x2
+    return 1 / (1 + np.exp(-z))
+
+
+def calculate_elo_rating(win_rates):
+    if win_rates == 1:
+        return float("inf")
+    elif win_rates == 0:
+        return float("-inf")
+    else:
+        return -400 * math.log10(-1 + (1 / win_rates))
+
+
+def calculate_elo_ratings(x1, x2, coef, bias):
+    win_rates = logistic_regression_output(x1, x2, coef, bias)
+    elo_ratings = [
+        [calculate_elo_rating(win_rate) for win_rate in win_rates_x]
+        for win_rates_x in win_rates
+    ]
+    return elo_ratings
+
+
 # Plot decision boundary
 def plot_decision_boundary(model, x_min, x_max, y_min, y_max, X_init, y_label_init):
     # Visualizing the decision boundary on log-log scales
-    x_log_space = np.logspace(np.log10(x_min), np.log10(x_max), 50)
-    y_log_space = np.logspace(np.log10(y_min), np.log10(y_max), 50)
+    x_log_space = np.logspace(np.log10(x_min), np.log10(x_max), 100)
+    y_log_space = np.logspace(np.log10(y_min), np.log10(y_max), 100)
     x_grid, y_grid = np.meshgrid(x_log_space, y_log_space)
-    X_grid_log = np.column_stack([x_grid.ravel(), y_grid.ravel()])
-    y_pred_grid_log = model.predict(np.log(X_grid_log)).reshape(x_grid.shape)
+    y_pred_grid_log = calculate_elo_ratings(
+        np.log(x_grid), np.log(y_grid), model.coef_, model.intercept_
+    )
+    # Calculate the decision boundary
+    w1, w2 = model.coef_[0]
+    b = model.intercept_[0]
+    x_log_space = np.logspace(np.log10(x_min), np.log10(x_max), 100)
+    decision_boundary = np.exp((-b - w1 * np.log(x_log_space)) / w2)
     bot_a_name, bot_b_name = get_bot_names()
 
     plt.figure(figsize=(10, 6))
-    plt.contourf(
-        x_grid, y_grid, y_pred_grid_log, alpha=0.5, levels=[0, 0.5, 1], cmap="coolwarm"
+    contour = plt.contourf(
+        x_grid, y_grid, y_pred_grid_log, 25, alpha=0.5, cmap="coolwarm"
     )
+    plt.colorbar(contour)
     plt.scatter(
         X_init[:, 0],
         X_init[:, 1],
@@ -187,20 +221,25 @@ def plot_decision_boundary(model, x_min, x_max, y_min, y_max, X_init, y_label_in
         edgecolor="k",
         label=f"Cool color: {bot_a_name} Won. Warm color: {bot_b_name} Won.",
     )
+    plt.plot(x_log_space, decision_boundary, color="gray", linewidth=2)
+    plt.ylim([y_min, y_max])
     plt.xscale("log", base=2)
     plt.yscale("log", base=2)
-    plt.title("Decision Boundary of Max Visits per Move")
+    plt.title("ELO Ratings Model with Logistic Regression")
     plt.xlabel(f"Max visits per move for {bot_a_name}")
     plt.ylabel(f"Max visits per move for {bot_b_name}")
     plt.legend()
+    plt.grid(visible=True)
     plt.ion()
     plt.show()
-    plt.savefig("boundary.png")
+    fig = f"boundary-{np.random.randint(10000)}.png"
+    plt.savefig(fig)
+    print(f"Written the figure to {fig}")
 
 
 if __name__ == "__main__":
     t0 = time.time()
-    x_min, x_max = 32, 1024
+    x_min, x_max = 1, 1024
     y_min, y_max = x_min, x_max
     N = 512
     # test_function = simulation_function
@@ -208,6 +247,8 @@ if __name__ == "__main__":
     X_init, y_label_init, model = fit_decision_boundary(
         test_function, x_min, x_max, y_min, y_max, N
     )
+    print(f"Coefficient: {model.coef_}")
+    print(f"Intercept: {model.intercept_}")
     elapsed = time.time() - t0
     print(f"Elapsed: {str(datetime.timedelta(seconds=round(elapsed)))}")
     plot_decision_boundary(model, x_min, x_max, y_min, y_max, X_init, y_label_init)
