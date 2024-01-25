@@ -1,6 +1,7 @@
 import datetime
 from functools import reduce
 import math
+from multiprocessing import Pool
 import subprocess
 import time
 from sgfmill import sgf
@@ -108,17 +109,22 @@ def match_games(
     results = []
     game_count_stop = game_count_start + games
 
-    for game_count in range(game_count_start, game_count_stop):
-        result = match(
-            black_parameters,
-            white_parameters,
-            "/Users/chinchangyang/Code/gogui/bin",
-            game_count,
-            sgffile_prefix=sgffile_prefix,
-            verbose=verbose,
+    with Pool(8) as p:
+        game_counts = range(game_count_start, game_count_stop)
+        results = p.starmap(
+            match,
+            [
+                (
+                    black_parameters,
+                    white_parameters,
+                    "/Users/chinchangyang/Code/gogui/bin",
+                    game_count,
+                    sgffile_prefix,
+                    verbose,
+                )
+                for game_count in game_counts
+            ],
         )
-
-        results.append(result)
 
     black_wins = [1 if result == -1 else 0 for result in results]
     black_win = reduce(lambda x, y: x + y, black_wins)
@@ -172,35 +178,35 @@ def elo_range(M: int, N: int, a: float) -> float:
         return (elo_negative_delta, elo_positive_delta)
 
 
+def get_bot_names():
+    bot_a_name = "b28c512nbt-s2830075392-v64"
+    bot_b_name = "b28c512nbt-s2652711936-v64"
+    return bot_a_name, bot_b_name
+
+
 if __name__ == "__main__":
     t0 = time.time()
-    bot_a_name = "K1e10-Hoff-LCUoff-T8-NPon"
+    bot_a_name, bot_b_name = get_bot_names()
 
     bot_a_parameters = {
         "exe": "/Users/chinchangyang/Code/KataGo/cpp/build/katago",
         "config": "/Users/chinchangyang/.katago/default_gtp.cfg",
-        "model": "/Users/chinchangyang/.katago/default_model.bin.gz",
-        "suppressVirtualLossExploreFactor": "1e10",
-        "suppressVirtualLossHindsight": "false",
-        "suppressVirtualLossLeakCatchUp": "false",
-        "numSearchThreads": "8",
-        "useNoisePruning": "true",
+        "model": "/Users/chinchangyang/Code/KataGo-Models/b28c512nbt-s2830075392-d3981649212.bin.gz",
+        "maxVisits": 64,
+        "numSearchThreads": 1,
+        "maxTime": 1e20,
     }
-
-    bot_b_name = "K8-Hoff-LCUoff-T4-NPoff"
 
     bot_b_parameters = {
         "exe": "/Users/chinchangyang/Code/KataGo/cpp/build/katago",
         "config": "/Users/chinchangyang/.katago/default_gtp.cfg",
-        "model": "/Users/chinchangyang/.katago/default_model.bin.gz",
-        "suppressVirtualLossExploreFactor": "8",  # {4, 64}
-        "suppressVirtualLossHindsight": "false",  # {false, true}
-        "suppressVirtualLossLeakCatchUp": "false",  # {false, true}
-        "numSearchThreads": "4",  # {8, 32}
-        "useNoisePruning": "false",  # {false, true}
+        "model": "/Users/chinchangyang/Code/KataGo-Models/b28c512nbt-s2652711936-d3972499590.bin.gz",
+        "maxVisits": 64,
+        "numSearchThreads": 1,
+        "maxTime": 1e20,
     }
 
-    total_games = 100
+    total_games = 1024
     half_games = int(total_games / 2)
 
     black_win, white_win, draw = match_games(
@@ -231,7 +237,7 @@ if __name__ == "__main__":
     bot_b_outcome = bot_b_win + (both_draw / 2)
 
     print(
-        f"Expected ELO of {bot_a_name} parameters (from {total_games} games) = {elo(bot_a_outcome, total_games)}"
+        f"Expected ELO of {bot_a_name} parameters (from {total_games} games) = 0 (baseline)"
     )
     print(
         f"Expected ELO of {bot_b_name} parameters (from {total_games} games) = {elo(bot_b_outcome, total_games)}"
