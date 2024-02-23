@@ -9,8 +9,8 @@ from match import match_games
 
 
 def get_bot_names():
-    bot_a_name = "b28c512nbt-s2830075392-t1"
-    bot_b_name = "b28c512nbt-s2652711936-t1"
+    bot_a_name = "b18c384nbt-s9131"
+    bot_b_name = "b28c512nbt-s4302"
     return bot_a_name, bot_b_name
 
 
@@ -22,7 +22,7 @@ def match_a_game(xi, yi):
     bot_a_parameters = {
         "exe": "/Users/chinchangyang/Code/KataGo/cpp/build/katago",
         "config": "/Users/chinchangyang/.katago/default_gtp.cfg",
-        "model": "/Users/chinchangyang/Code/KataGo-Models/b28c512nbt-s2830075392-d3981649212.bin.gz",
+        "model": "/Users/chinchangyang/Code/KataGo-Models/kata1-b18c384nbt-s9131461376-d4087399203.bin.gz",
         "maxVisits": f"{xi_int}",
         "numSearchThreads": 1,
         "maxTime": 1e20,
@@ -31,13 +31,13 @@ def match_a_game(xi, yi):
     bot_b_parameters = {
         "exe": "/Users/chinchangyang/Code/KataGo/cpp/build/katago",
         "config": "/Users/chinchangyang/.katago/default_gtp.cfg",
-        "model": "/Users/chinchangyang/Code/KataGo-Models/b28c512nbt-s2652711936-d3972499590.bin.gz",
+        "model": "/Users/chinchangyang/Code/KataGo-Models/b28c512nbt-s4302634752-d4157365465.bin.gz",
         "maxVisits": f"{yi_int}",
         "numSearchThreads": 1,
         "maxTime": 1e20,
     }
 
-    id = np.random.randint(10000)
+    id = np.random.randint(100000)
     sgffile_prefix = f"maxVisits-{xi_int}-{yi_int}-{id}"
 
     if np.random.randn() < 0.5:
@@ -141,8 +141,12 @@ def select_top_k(X, ei, K):
 # Fit decision boundary
 def fit_decision_boundary(black_box_function, x_min, x_max, y_min, y_max, N):
     N_init = max(min(30, N), int(0.05 * N))
-    K = 4
+    K = 8
     N_iter = int((N - N_init) / K)
+
+    # Lists to store coefficients and bias
+    coefficients_history = []
+    bias_history = []
 
     # Initialize Logistic Regression
     model = LogisticRegression()
@@ -152,6 +156,10 @@ def fit_decision_boundary(black_box_function, x_min, x_max, y_min, y_max, N):
         black_box_function, N_init, x_min, x_max, y_min, y_max
     )
     model.fit(np.log(X_init), y_label_init)
+
+    # Store coefficients and bias
+    coefficients_history.append(model.coef_[0])
+    bias_history.append(model.intercept_[0])
 
     # Active Learning Loop
     for iteration in range(N_iter):
@@ -166,7 +174,11 @@ def fit_decision_boundary(black_box_function, x_min, x_max, y_min, y_max, N):
         y_label_init = np.hstack([y_label_init, y_label_select])
         model.fit(np.log(X_init), y_label_init)
 
-    return X_init, y_label_init, model
+        # Store coefficients and bias
+        coefficients_history.append(model.coef_[0])
+        bias_history.append(model.intercept_[0])
+
+    return X_init, y_label_init, model, coefficients_history, bias_history
 
 
 def logistic_regression_output(x1, x2, coef, bias):
@@ -237,14 +249,45 @@ def plot_decision_boundary(model, x_min, x_max, y_min, y_max, X_init, y_label_in
     print(f"Written the figure to {fig}")
 
 
+def plot_coefficients_bias_dynamics(coeffs_hist, bias_hist):
+    """
+    Plots the dynamics of the coefficients and bias of the logistic regression model.
+
+    Args:
+    coeffs_hist (list): List of coefficient arrays from each iteration.
+    bias_hist (list): List of bias values from each iteration.
+    """
+
+    iterations = range(len(coeffs_hist))
+    coeffs_hist = np.array(coeffs_hist)
+    bias_hist = np.array(bias_hist)
+
+    plt.figure(figsize=(12, 6))
+    for i in range(coeffs_hist.shape[1]):
+        plt.plot(iterations, coeffs_hist[:, i], label=f"Coefficient {i+1}")
+    plt.plot(iterations, bias_hist, label="Bias", linestyle="--")
+    plt.xlabel("Iteration")
+    plt.ylabel("Value")
+    plt.title("Dynamics of Coefficients and Bias in Logistic Regression")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    # Save the figure
+    filename = f"regression-{np.random.randint(10000)}.png"
+    plt.savefig(filename)
+    plt.show()
+    print(f"Plot saved as '{filename}'")
+
+
 if __name__ == "__main__":
     t0 = time.time()
-    x_min, x_max = 1, 1024
+    x_min, x_max = 2, 1024
     y_min, y_max = x_min, x_max
-    N = 512
+    N = 256
     # test_function = simulation_function
     test_function = match_function
-    X_init, y_label_init, model = fit_decision_boundary(
+    X_init, y_label_init, model, coeffs_hist, bias_hist = fit_decision_boundary(
         test_function, x_min, x_max, y_min, y_max, N
     )
     print(f"Coefficient: {model.coef_}")
@@ -252,3 +295,6 @@ if __name__ == "__main__":
     elapsed = time.time() - t0
     print(f"Elapsed: {str(datetime.timedelta(seconds=round(elapsed)))}")
     plot_decision_boundary(model, x_min, x_max, y_min, y_max, X_init, y_label_init)
+
+    # Plot the dynamics of coefficients and bias
+    plot_coefficients_bias_dynamics(coeffs_hist, bias_hist)
