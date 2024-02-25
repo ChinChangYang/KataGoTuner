@@ -165,7 +165,7 @@ def fit_decision_boundary(black_box_function, x_min, x_max, y_min, y_max, N):
     for iteration in range(N_iter):
         N_cand = 50
         X_cand = generate_candidates(N_cand, x_min, x_max, y_min, y_max)
-        temperature = 3.0 * (N_iter - iteration) / N_iter
+        temperature = 2.0 * (N_iter - iteration) / N_iter
         ei = compute_expected_improvement(X_cand, model, temperature=temperature)
         X_select = select_top_k(X_cand, ei, K)
         print(f"Iteration: {iteration + 1}/{N_iter} N_cand={N_cand}")
@@ -284,7 +284,7 @@ if __name__ == "__main__":
     t0 = time.time()
     x_min, x_max = 2, 1024
     y_min, y_max = x_min, x_max
-    N = 256
+    N = 1024
     # test_function = simulation_function
     test_function = match_function
     X_init, y_label_init, model, coeffs_hist, bias_hist = fit_decision_boundary(
