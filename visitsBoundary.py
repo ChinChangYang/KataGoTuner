@@ -9,8 +9,8 @@ from match import match_games
 
 
 def get_bot_names():
-    bot_a_name = "b18c384nbt-s9131"
-    bot_b_name = "b28c512nbt-s4302"
+    bot_a_name = "b28c512nbt-s4302-t1"
+    bot_b_name = "b28c512nbt-s4302-t32"
     return bot_a_name, bot_b_name
 
 
@@ -22,7 +22,7 @@ def match_a_game(xi, yi):
     bot_a_parameters = {
         "exe": "/Users/chinchangyang/Code/KataGo/cpp/build/katago",
         "config": "/Users/chinchangyang/.katago/default_gtp.cfg",
-        "model": "/Users/chinchangyang/Code/KataGo-Models/kata1-b18c384nbt-s9131461376-d4087399203.bin.gz",
+        "model": "/Users/chinchangyang/Code/KataGo-Models/b28c512nbt-s4302634752-d4157365465.bin.gz",
         "maxVisits": f"{xi_int}",
         "numSearchThreads": 1,
         "maxTime": 1e20,
@@ -33,7 +33,7 @@ def match_a_game(xi, yi):
         "config": "/Users/chinchangyang/.katago/default_gtp.cfg",
         "model": "/Users/chinchangyang/Code/KataGo-Models/b28c512nbt-s4302634752-d4157365465.bin.gz",
         "maxVisits": f"{yi_int}",
-        "numSearchThreads": 1,
+        "numSearchThreads": 32,
         "maxTime": 1e20,
     }
 
@@ -246,7 +246,7 @@ def plot_decision_boundary(model, x_min, x_max, y_min, y_max, X_init, y_label_in
     plt.show()
     fig = f"boundary-{np.random.randint(10000)}.png"
     plt.savefig(fig)
-    print(f"Written the figure to {fig}")
+    print(f"Saved the contour and scatter plots to '{fig}'.")
 
 
 def plot_coefficients_bias_dynamics(coeffs_hist, bias_hist):
@@ -277,12 +277,12 @@ def plot_coefficients_bias_dynamics(coeffs_hist, bias_hist):
     filename = f"regression-{np.random.randint(10000)}.png"
     plt.savefig(filename)
     plt.show()
-    print(f"Plot saved as '{filename}'")
+    print(f"Saved dynamics of coefficients and bias to '{filename}'.")
 
 
 if __name__ == "__main__":
     t0 = time.time()
-    x_min, x_max = 2, 1024
+    x_min, x_max = 32, 1024
     y_min, y_max = x_min, x_max
     N = 1024
     # test_function = simulation_function
@@ -290,10 +290,13 @@ if __name__ == "__main__":
     X_init, y_label_init, model, coeffs_hist, bias_hist = fit_decision_boundary(
         test_function, x_min, x_max, y_min, y_max, N
     )
-    print(f"Coefficient: {model.coef_}")
-    print(f"Intercept: {model.intercept_}")
     elapsed = time.time() - t0
     print(f"Elapsed: {str(datetime.timedelta(seconds=round(elapsed)))}")
+    print(f"The expected ELO rating is modeled by the logistic regression:")
+    print(f"ELO = 400 * (b + (w1 * ln(x)) + (w2 * ln(y))) / ln(10)")
+    print(f"Coefficient: [w1, w2] = {model.coef_}")
+    print(f"Intercept: b = {model.intercept_}")
+    print(f"The x and y variables are max visits that are set in the KataGo configuration.")
     plot_decision_boundary(model, x_min, x_max, y_min, y_max, X_init, y_label_init)
 
     # Plot the dynamics of coefficients and bias
