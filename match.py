@@ -37,8 +37,10 @@ def get_command(parameters) -> List[str]:
     command = [
         parameters["exe"],
         "gtp",
-        "-config", parameters["config"],
-        "-model", parameters["model"]
+        "-config",
+        parameters["config"],
+        "-model",
+        parameters["model"],
     ]
     override_options = [
         "maxVisits",
@@ -68,7 +70,8 @@ def match(
     game_count: int,
     sgffile_prefix: str = "match",
     verbose: bool = True,
-) -> int:
+    black_bot: str = "A",  # Indicate which bot is black
+) -> Tuple[int, str]:
     """
     Play a single game between two engines.
 
@@ -134,7 +137,7 @@ def match(
     except Exception as e:
         print(f"Error processing SGF file {sgffile}: {str(e)}")
 
-    return is_won
+    return is_won, black_bot
 
 
 def match_helper(args):
@@ -157,8 +160,8 @@ def match_games(
     game_counts: List[int],
     sgffile_prefix: str = "match",
     verbose: bool = True,
-    pool: Pool = None, # type: ignore
-) -> List[int]:
+    pool: Pool = None,  # type: ignore
+) -> List[Tuple[int, str]]:
     """
     Play multiple games between two engines using multiprocessing.
 
@@ -181,39 +184,40 @@ def match_games(
         is_pool_owner = True
 
     try:
-        # Prepare arguments for each game
         zipped_parameters = []
         for game_count in game_counts:
-            # Alternate black and white assignments
             if game_count % 2 == 0:
-                # Even-indexed games: bot A as black, bot B as white
-                zipped_parameters.append((
-                    black_parameters,
-                    white_parameters,
-                    gogui_classpath,
-                    game_count,
-                    sgffile_prefix,
-                    verbose
-                ))
+                zipped_parameters.append(
+                    (
+                        black_parameters,
+                        white_parameters,
+                        gogui_classpath,
+                        game_count,
+                        sgffile_prefix,
+                        verbose,
+                        "A",  # Bot A is black
+                    )
+                )
             else:
-                # Odd-indexed games: bot B as black, bot A as white
-                zipped_parameters.append((
-                    white_parameters,
-                    black_parameters,
-                    gogui_classpath,
-                    game_count,
-                    sgffile_prefix,
-                    verbose
-                ))
+                zipped_parameters.append(
+                    (
+                        white_parameters,
+                        black_parameters,
+                        gogui_classpath,
+                        game_count,
+                        sgffile_prefix,
+                        verbose,
+                        "B",  # Bot B is black
+                    )
+                )
 
-        # Use imap_unordered with the helper function
         results = pool.imap_unordered(match_helper, zipped_parameters)
     finally:
         if is_pool_owner:
             pool.close()
             pool.join()
 
-    return results  # Return an iterator for tqdm integration
+    return results
 
 
 def elo(M: float, N: float) -> float:
@@ -264,7 +268,9 @@ def elo_range(M: int, N: int, a: float) -> Tuple[float, float]:
     return (elo_negative_delta, elo_positive_delta)
 
 
-def print_game_results(bot_a_name: str, bot_b_name: str, bot_b_outcome: float, total_games: int):
+def print_game_results(
+    bot_a_name: str, bot_b_name: str, bot_b_outcome: float, total_games: int
+):
     """
     Print the results of the game between two bots.
 
@@ -358,9 +364,7 @@ def main():
     fp32 = False
     fp_name = "fp32" if fp32 else "fp16"
     bot_b_name = f"b28c512nbt-coreml-{fp_name}-v{maxVisits}"
-    bot_b_parameters = define_bot_coreml_parameters(
-        maxVisits=maxVisits, fp32=fp32
-    )
+    bot_b_parameters = define_bot_coreml_parameters(maxVisits=maxVisits, fp32=fp32)
 
     # Define total number of games
     total_games = 1024
@@ -372,38 +376,41 @@ def main():
     # Initialize a multiprocessing Pool
     pool_size = cpu_count()
     with Pool(pool_size) as pool:
-        # Execute all matches in parallel using imap_unordered with the helper function
         results_iterator = match_games(
             black_parameters=bot_a_parameters,
             white_parameters=bot_b_parameters,
             gogui_classpath=gogui_classpath,
             game_counts=game_counts,
             sgffile_prefix="match",
-            verbose=False,  # Disable per-game verbosity
-            pool=pool
+            verbose=False,
+            pool=pool,
         )
 
-        # Initialize counters
         bot_a_win = 0
         bot_b_win = 0
         draws = 0
 
-        # Initialize the progress bar
         with tqdm(total=total_games, desc="Matching Games", unit="game") as pbar:
             for res in results_iterator:
-                if res == 1:
-                    bot_a_win += 1
-                elif res == -1:
-                    bot_b_win += 1
+                is_won, black_bot = res
+                if is_won == 1:
+                    # Black won
+                    if black_bot == "A":
+                        bot_a_win += 1
+                    else:
+                        bot_b_win += 1
+                elif is_won == -1:
+                    # White won
+                    if black_bot == "A":
+                        bot_b_win += 1
+                    else:
+                        bot_a_win += 1
                 else:
                     draws += 1
 
-                # Update the progress bar with current scores
-                pbar.set_postfix({
-                    bot_a_name: bot_a_win,
-                    bot_b_name: bot_b_win,
-                    "Draws": draws
-                })
+                pbar.set_postfix(
+                    {bot_a_name: bot_a_win, bot_b_name: bot_b_win, "Draws": draws}
+                )
                 pbar.update(1)
 
     # Calculate outcome for bot B based on wins and draws
